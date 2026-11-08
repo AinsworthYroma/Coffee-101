@@ -1,0 +1,41 @@
+.espresso-card{--espresso-rx:0deg;--espresso-ry:0deg;--espresso-light-x:50%;--espresso-light-y:28%;position:relative;min-width:0;isolation:isolate;align-self:start;border:1px solid #b98658;border-radius:18px;background:linear-gradient(145deg,#38251c,#20140f 70%);color:#fff1dc;box-shadow:0 12px 25px #24130b25,inset 0 1px 0 #f7d9ad26;transform:perspective(1000px) rotateX(var(--espresso-rx)) rotateY(var(--espresso-ry));transition:transform 180ms ease,box-shadow 180ms ease;overflow:hidden}
+.espresso-card::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at var(--espresso-light-x) var(--espresso-light-y),#d59c6630,transparent 65%)}
+.espresso-card:focus-within{outline:2px solid #f0cf9b;outline-offset:4px}
+.espresso-card__stage{perspective:1200px}
+.espresso-card__rotor{display:grid;transform-style:preserve-3d;transition:transform 460ms cubic-bezier(.2,.7,.2,1)}
+.espresso-card[data-flipped=true] .espresso-card__rotor{transform:rotateY(180deg)}
+.espresso-card__face{grid-area:1 / 1;min-width:0;padding:24px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow-wrap:anywhere}
+.espresso-card__front{display:flex;flex-direction:column;min-height:370px}
+.espresso-card__eyebrow{display:flex;justify-content:space-between;align-items:start;gap:12px;color:#d9b68d;font-size:11px;line-height:1.5;letter-spacing:.04em}
+.espresso-card__eyebrow>span:first-child{text-transform:uppercase;font-weight:700}
+.espresso-card__eyebrow>span:last-child{white-space:nowrap}
+.espresso-card__machine{display:grid;place-items:center;flex:1;min-height:205px;padding:20px 16px;background:radial-gradient(ellipse at 50% 60%,#be895827,transparent 65%)}
+.espresso-card .espresso-card__machine .tasting-equipment{display:grid;width:100%;height:180px;min-width:0;background:transparent;color:#e7c69c;filter:drop-shadow(0 16px 10px #0b070765)}
+.espresso-card .espresso-card__machine .tasting-equipment img{width:100%;height:100%;max-height:180px;object-fit:contain}
+.espresso-card__identity{text-align:center;padding:8px 0 4px}
+.espresso-card .espresso-card__identity h3,.espresso-card .espresso-card__back-heading h3{margin:0;color:#fff1dc;font-family:var(--font-heading);font-weight:700;font-size:28px;line-height:1.12;text-wrap:balance}
+.espresso-card .espresso-card__identity p{margin:9px 0 0;color:#dfbf98;font-size:14px}
+.espresso-card .espresso-card__identity .espresso-card__roaster{margin-top:5px;font-size:12px;color:#c3aa90}
+.espresso-card__back{transform:rotateY(180deg);background:linear-gradient(145deg,#38261d,#241810);display:flex;flex-direction:column;gap:18px}
+.espresso-card__caption{display:block;color:#d7ad7f;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.espresso-card .espresso-card__back-heading h3{font-size:22px;margin-top:7px}
+.espresso-card .espresso-card__back-heading p{font-size:13px;color:#d8b994;margin:6px 0 0}
+.espresso-card__facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;margin:0}
+.espresso-card__facts>div{min-width:0;border-top:1px solid #a77a524d;padding-top:9px}
+.espresso-card__facts dt{color:#cda57d;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.espresso-card__facts dd{margin:5px 0 0;color:#fff1dc;font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.espresso-card__aromas{display:flex;align-items:center;gap:14px;padding-top:15px;border-top:1px solid #a77a524d;min-width:0}
+.espresso-card__aromas>div{min-width:0}
+.espresso-card__aromas .aroma-signature{flex:0 0 62px;width:62px;height:62px}
+.espresso-card .espresso-card__aromas p{font-size:13px;line-height:1.55;margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.espresso-card .espresso-card__notes p{margin:6px 0 0;font-size:13px;line-height:1.6;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:#e8d4bb}
+.espresso-card .espresso-card__empty{font-size:13px;color:#d8b994}
+.espresso-card__actions{position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin:0 24px;padding:12px 0;border-top:1px solid #b9885c55}
+.espresso-card__actions button{min-height:44px;border:0;border-radius:5px;background:transparent;color:#e9c493;font:700 12px var(--font-body);padding:8px 0;text-align:left;cursor:pointer}
+.espresso-card__actions .espresso-card__open{color:#fff1dc}
+.espresso-card__actions button:hover{text-decoration:underline;text-underline-offset:4px}
+.espresso-card__actions button:focus-visible{outline:2px solid #f0cf9b;outline-offset:3px}
+@media(max-width:520px){.espresso-card__face{padding:22px}.espresso-card__actions{margin-inline:22px}.espresso-card__front{min-height:350px}.espresso-card .espresso-card__identity h3{font-size:26px}}
+@media(prefers-reduced-motion:reduce){.espresso-card,.espresso-card__rotor{transition:none}.espresso-card{transform:none}}
+html:has(.motion-setting input:checked) .espresso-card,html:has(.motion-setting input:checked) .espresso-card__rotor{transition:none}
+html:has(.motion-setting input:checked) .espresso-card{transform:none}
