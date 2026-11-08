@@ -80,6 +80,17 @@ describe('compte', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Si cette adresse')
   })
 
+  it('donne le même message si une inscription existe déjà', async () => {
+    mocks.auth.signUp.mockResolvedValue({ data: { session: null }, error: { code: 'user_already_exists' } })
+    await openAccount()
+    fireEvent.click(screen.getByRole('button', { name: 'Créer un compte' }))
+    fillEmail(); fillPassword()
+    fireEvent.change(screen.getByLabelText('Confirmer le mot de passe'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Créer un compte' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Si cette adresse')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('demande un lien puis permet de modifier le mot de passe', async () => {
     await openAccount()
     fireEvent.click(screen.getByRole('button', { name: 'Mot de passe oublié ?' }))
@@ -104,6 +115,40 @@ describe('compte', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Se connecter' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Connexion impossible'))
     expect(screen.getByRole('alert')).not.toHaveTextContent('secret')
+  })
+
+  it('signale une erreur réseau à la demande de réinitialisation', async () => {
+    mocks.auth.resetPasswordForEmail.mockRejectedValue(new Error('offline'))
+    await openAccount()
+    fireEvent.click(screen.getByRole('button', { name: 'Mot de passe oublié ?' }))
+    fillEmail()
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer le lien' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('La demande n’a pas abouti')
+  })
+
+  it('garde la session si la déconnexion échoue', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    mocks.auth.signOut.mockResolvedValue({ error: new Error('offline') })
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Se déconnecter' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Déconnexion impossible')
+    expect(screen.getByText(/Connecté avec/)).toBeInTheDocument()
+  })
+
+  it('restaure l’écran de nouveau mot de passe après un rechargement', async () => {
+    sessionStorage.setItem('coffee101-password-recovery', 'user-1')
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    render(<Account />)
+    expect(await screen.findByRole('heading', { name: 'Choisir un nouveau mot de passe' })).toBeVisible()
+  })
+
+  it('confirme le retour et ne confond pas les comptes lors de la reprise', async () => {
+    sessionStorage.setItem('coffee101-password-recovery', 'another-user')
+    mocks.initializeAuth.mockResolvedValue({ session, callback: 'confirm', failed: false })
+    render(<Account />)
+    expect(await screen.findByText('Ton adresse a été confirmée.')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Choisir un nouveau mot de passe' })).not.toBeInTheDocument()
   })
 
   it('empêche les soumissions simultanées et indique l’attente', async () => {
