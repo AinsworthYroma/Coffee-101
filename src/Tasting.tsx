@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Download, FileUp, Plus } from 'lucide-react'
 import type { TastingProposal } from './Preparation'
 import { aromas, type AromaNode } from './aromas'
-import { isStore, loadStore, newTasting, saveStore, type AromaChoice, type TastingRecord, type TastingStore } from './tastingStore'
+import { isStore, loadStore, newTasting, saveStore, StaleNotebookError, type AromaChoice, type TastingRecord, type TastingStore } from './tastingStore'
+import { initializeAuth, supabase } from './auth'
+import { isNotebookPayload, isTechnicalPlaceholder, loadAccountStore, loadNotebookConflicts, notebookClient, resolveNotebookConflicts, saveAccountStore, synchronizeNotebook, type ConflictDetails, type Payload } from './notebookSync'
+import { failNotebookSync, finishNotebookSync, finishNotebookWrite, markNotebookFailure, markNotebookPending, notebookActivity, startNotebookSync, startNotebookWrite } from './notebookActivity'
+import { observeAuth } from './sharedAuth'
+import type { Session } from '@supabase/supabase-js'
 import BrandMark from './BrandMark'
 import SpotlightCard from './vendor/react-bits/SpotlightCard'
 import SpecularButton from './vendor/react-bits/SpecularButton'
@@ -15,6 +20,14 @@ const images = { automatic: '/equipements/automatique.png', aeropress: '/equipem
 const methodName = (record: TastingRecord) => record.proposal ? record.proposal.choices.method === 'filter' ? record.proposal.choices.filterMode === 'v60' ? 'V60 manuel' : 'Filtre électrique' : methods[record.proposal.choices.method] : 'Méthode non renseignée'
 const title = (record: TastingRecord) => record.name.trim() || `${methodName(record)} · ${record.date}`
 const blankStore = (): TastingStore => ({ version: 1, drafts: [], records: [] })
+function uniqueTastingId(store: TastingStore): string {
+  const taken = new Set([...store.drafts, ...store.records].map(item => item.id))
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const id = crypto.randomUUID()
+    if (!taken.has(id)) return id
+  }
+  throw new Error('Unable to allocate notebook identifier')
+}
 
 function Equipment({ record }: { record: TastingRecord }) {
   const method = record.proposal?.choices.method
@@ -86,7 +99,61 @@ function TastingDetail({ record, edit, duplicate, remove, back }: { record: Tast
     <section className="detail-section detail-recipe"><p className="kicker">02 / RECETTE ET PRÉPARATION</p><h2>Recette proposée</h2>{record.proposal ? <><p>{methodName(record)} · Intention : {record.proposal.choices.profile === 'round' ? 'Rond & gourmand' : 'Expressif & complexe'}</p><dl className="tasting-parameters">{parameters.map((parameter, index) => <div key={index}><dt>{parameter.label}</dt><dd>{parameter.value}</dd></div>)}</dl><details><summary>Étapes de la recette proposée</summary><ol>{record.proposal.recipe.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>{record.proposal.recipe.assumptions.map(text => <p key={text}>{text}</p>)}</details></> : <p>Aucune recette proposée.</p>}<div className="detail-actual"><h3>Préparation réellement confirmée</h3>{!record.actual.trim() ? <p>Non renseignée.</p> : same ? <p>Identique à la recette proposée.</p> : <dl className="tasting-parameters">{actualLines.map((line, index) => { const separator = line.indexOf(' : '); const label = separator >= 0 ? line.slice(0, separator) : ''; const value = separator >= 0 ? line.slice(separator + 3) : line; const proposed = parameters.find(parameter => parameter.label === label); return <div key={index}><dt>{label || 'Note de préparation'}{proposed && proposed.value !== value ? ' · valeur différente' : ''}</dt><dd>{value}</dd></div> })}</dl>}</div></section><div className="detail-delete"><button className="tasting-link" type="button" onClick={remove}>Supprimer</button></div></div>
 }
 
-export default function Tasting({ active, proposal, clearProposal, libraryRequest, onReturn }: { active: boolean; proposal: TastingProposal | null; clearProposal: () => void; libraryRequest: number; onReturn: () => void }) {
+function ConflictVersion({ label, value, deleted }: { label: string; value: Payload; deleted: boolean }) {
+  const record = value.record
+  const fields: [string, string][] = [
+    ['Nom', record.name], ['Date', record.date], ['Torréfacteur', record.roaster], ['Pays', record.country],
+    ['Région', record.region], ['Altitude', record.altitude], ['Traitement', record.processing],
+    ['Précision du traitement', record.processingOther], ['Fermentation', record.fermentation], ['Torréfaction', record.roast],
+    ['Préparation réellement utilisée', record.actual], ['Arômes', record.aromas.map(item => item.label).join(', ')],
+    ['Acidité', record.acidity], ['Amertume', record.bitterness], ['Douceur', record.sweetness],
+    ['Corps', record.body], ['Persistance', record.finish], ['Appréciation', record.appreciation],
+    ['Notes', record.notes], ['La prochaine fois', record.nextTime],
+  ]
+  return <div><h4>{label} · {deleted ? 'suppression' : value.kind === 'draft' ? 'brouillon' : 'fiche'}</h4>
+    <dl>{fields.filter(([, text]) => text).map(([field, text]) => <div key={field}><dt>{field}</dt><dd className="preserve-lines">{text}</dd></div>)}</dl>
+    {record.proposal && <p>Recette proposée : {record.proposal.methodName}</p>}
+  </div>
+}
+
+type Props = { active: boolean; proposal: TastingProposal | null; clearProposal: () => void; libraryRequest: number; onReturn: () => void }
+
+export default function Tasting(props: Props) {
+  const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(!supabase)
+  const [owners, setOwners] = useState<string[]>([''])
+  const [switchWarning, setSwitchWarning] = useState('')
+  const current = useRef<Session | null>(null)
+  const authEpoch = useRef(0)
+  useEffect(() => {
+    if (!supabase) return
+    let active = true
+    let changed = false
+    const accept = (next: Session | null) => {
+      const oldOwner = current.current?.user.id ?? ''
+      const newOwner = next?.user.id ?? ''
+      if (oldOwner !== newOwner) {
+        const activity = notebookActivity(oldOwner)
+        if (activity.pending || activity.failed || (oldOwner && activity.queue !== 'empty')) setSwitchWarning('Le carnet précédent contient un travail non enregistré ou dont la synchronisation n’est pas confirmée. Reviens à ce carnet sans fermer la page pour le vérifier et l’exporter.')
+        const focused = document.activeElement
+        if (focused instanceof HTMLElement && focused.closest('[data-notebook]')) focused.blur()
+      }
+      authEpoch.current++
+      current.current = next
+      setSession(next)
+      setAuthReady(true)
+      if (next) setOwners(owners => owners.includes(next.user.id) ? owners : [...owners, next.user.id])
+    }
+    const unsubscribe = observeAuth((_event, next) => { if (active) { changed = true; accept(next) } })
+    void initializeAuth().then(result => { if (active && !changed) accept(result.session) })
+    return () => { active = false; authEpoch.current++; current.current = null; unsubscribe() }
+  }, [])
+  if (!authReady) return <main id={props.active ? 'main' : undefined} className="tasting wrap"><p role="status">Chargement du compte et du carnet…</p></main>
+  const owner = session?.user.id ?? ''
+  return <>{switchWarning && <p className="tasting-error" role="alert">{switchWarning} <button type="button" onClick={() => setSwitchWarning('')}>Compris</button></p>}{owners.map(id => <div key={id} data-notebook hidden={id !== owner} inert={id !== owner || undefined} aria-hidden={id !== owner || undefined}><Notebook {...props} active={props.active && id === owner} proposal={id === owner ? props.proposal : null} owner={id} session={id === owner ? session : null} current={current} authEpoch={authEpoch} /></div>)}</>
+}
+
+function Notebook({ active, proposal, clearProposal, libraryRequest, onReturn, owner, session, current, authEpoch }: Props & { owner: string; session: Session | null; current: React.RefObject<Session | null>; authEpoch: React.RefObject<number> }) {
   const [store, setStore] = useState(blankStore)
   const storeRef = useRef(store)
   const [error, setError] = useState('')
@@ -109,26 +176,83 @@ export default function Tasting({ active, proposal, clearProposal, libraryReques
   const saveLock = useRef(false)
   const createLock = useRef(false)
   const transactionLock = useRef(false)
+  const [syncMessage, setSyncMessage] = useState('')
+  const [conflictCount, setConflictCount] = useState(0)
+  const [conflictDetails, setConflictDetails] = useState<ConflictDetails[]>([])
+  const [syncTick, setSyncTick] = useState(0)
+  const latest = useRef(0)
   useEffect(() => {
     if (!message) return
     const timer = window.setTimeout(() => setMessage(''), 6000)
     return () => window.clearTimeout(timer)
   }, [message])
   useEffect(() => {
-    load.current ??= loadStore()
+    load.current ??= owner ? loadAccountStore(owner) : loadStore()
     let active = true
-    load.current.then(data => { if (active) { storeRef.current = data; setStore(data); blocked.current = false; setReady(true) } }).catch(() => { if (active) { setError('Impossible de lire le carnet. Les données existantes ne seront pas écrasées.'); setReady(true) } })
+    load.current.then(data => { if (active) { storeRef.current = data; setStore(data); blocked.current = false; setReady(true) } }).catch(() => { if (active) { markNotebookFailure(owner); setError('Impossible de lire le carnet. Les données existantes ne seront pas écrasées.'); setReady(true) } })
     return () => { active = false }
-  }, [])
+  }, [owner])
+  useEffect(() => {
+    if (!owner || !session || !ready || blocked.current) return
+    const refresh = () => setSyncTick(value => value + 1)
+    window.addEventListener('online', refresh)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [owner, session, ready])
+  useEffect(() => {
+    if (!owner || !session || !ready || blocked.current || document.hidden) return
+    let live = true
+    const revision = latest.current
+    const epoch = authEpoch.current
+    const isCurrent = () => live && authEpoch.current === epoch && !blocked.current && !transactionLock.current && current.current?.user.id === owner
+    startNotebookSync(owner)
+    setSyncMessage('Synchronisation en cours…')
+    if (!navigator.locks) { failNotebookSync(owner); setSyncMessage('Ce navigateur ne permet pas de synchroniser en sécurité entre les onglets. Ton carnet reste sur cet appareil.'); return () => { live = false } }
+    void synchronizeNotebook(owner, notebookClient(session.access_token), isCurrent).then(async result => {
+      if (!isCurrent()) return
+      const saved = await loadAccountStore(owner)
+      if (!isCurrent()) return
+      const details = await loadNotebookConflicts(owner)
+      if (!isCurrent()) return
+      if (revision !== latest.current) {
+        finishNotebookSync(owner, result.pending, !!result.conflicts || !!result.unsupported, false)
+        setSyncMessage('Modification en cours d’enregistrement ou en attente de synchronisation.')
+        return
+      }
+      storeRef.current = saved; setStore(saved)
+      setConflictCount(result.conflicts)
+      setConflictDetails(details)
+      finishNotebookSync(owner, result.pending, !!result.conflicts || !!result.unsupported, revision === latest.current)
+      const notices: string[] = []
+      if (result.conflicts) notices.push(`Conflit de synchronisation : ${result.conflicts} élément(s). Les versions locales sont conservées ; exporte ton carnet avant toute intervention.`)
+      if (result.pending) notices.push(`${result.pending} modification(s) attendent une confirmation du compte.`)
+      if (result.unsupported) notices.push('Certaines données distantes ne sont pas reconnues et restent intactes.')
+      setSyncMessage(notices.length ? notices.join(' ') : 'Lecture du compte terminée ; aucune modification locale en attente.')
+    }).catch(async () => {
+      if (!isCurrent()) return
+      failNotebookSync(owner)
+      setSyncMessage('Synchronisation en attente. Vérifie la connexion et la session ; les modifications restent sur cet appareil.')
+      try {
+        const details = await loadNotebookConflicts(owner)
+        if (isCurrent()) { setConflictCount(details.length); setConflictDetails(details) }
+      } catch { /* Le carnet reste disponible en mémoire si son stockage ne peut pas être lu. */ }
+    })
+    return () => { live = false }
+  }, [owner, session, ready, active, syncTick, current, authEpoch])
   const updateStore = (next: TastingStore, transactional = true): Promise<boolean> => {
     if (transactionLock.current) return Promise.resolve(false)
+    const previous = storeRef.current
+    latest.current++
+    startNotebookWrite(owner)
+    if (owner) setSyncMessage('Modification en cours d’enregistrement ou en attente de synchronisation.')
     if (transactional) { transactionLock.current = true; setCommitting(true) }
     else { storeRef.current = next; setStore(next) }
     setSaving(true)
     const currentWrite = ++writeNumber.current
-    const write = writes.current.then(async () => { if (blocked.current) throw new Error(); await saveStore(next) })
+    const write = writes.current.then(async () => { if (blocked.current) throw new Error(); if (owner) await saveAccountStore(owner, previous, next); else await saveStore(next, previous) })
     writes.current = write.catch(() => {})
-    return write.then(() => { if (transactional) { storeRef.current = next; setStore(next); transactionLock.current = false; setCommitting(false) }; if (currentWrite === writeNumber.current) { setError(''); setSaving(false) }; return true }, () => { if (transactional) { transactionLock.current = false; setCommitting(false) }; if (currentWrite === writeNumber.current) { setError('Enregistrement impossible dans ce navigateur. Ton travail reste disponible pendant cette visite.'); setSaving(false) }; return false })
+    return write.then(() => { finishNotebookWrite(owner, true); if (transactional) { storeRef.current = next; setStore(next); transactionLock.current = false; setCommitting(false) }; if (currentWrite === writeNumber.current) { setError(''); setSaving(false); if (owner) setSyncTick(value => value + 1) }; return true }, (reason: unknown) => { finishNotebookWrite(owner, false); if (!transactional || reason instanceof StaleNotebookError) { blocked.current = true; setSyncMessage('Synchronisation suspendue pour protéger ton travail.') }; if (transactional) { transactionLock.current = false; setCommitting(false) }; if (currentWrite === writeNumber.current) { setError('Enregistrement impossible ou carnet modifié dans un autre onglet. Ton travail reste disponible pendant cette visite : exporte-le avant de fermer.'); setSaving(false) }; return false })
   }
   const create = (source: TastingProposal | null = null) => {
     if (createLock.current) return
@@ -152,32 +276,86 @@ export default function Tasting({ active, proposal, clearProposal, libraryReques
   const finish = async () => {
     if (!draft || saveLock.current) return
     saveLock.current = true
-    const final = { ...draft, id: draft.editOf ?? draft.id, editOf: undefined }
-    const next = { ...storeRef.current, drafts: storeRef.current.drafts.filter(item => item.id !== draft.id), records: [final, ...storeRef.current.records.filter(item => item.id !== final.id)] }
-    if (await updateStore(next, true)) { setId(final.id); setView('detail'); setMessage('Ta fiche est enregistrée.') }
+    const original = draft.editOf ? storeRef.current.records.find(item => item.id === draft.editOf) : undefined
+    const changed = !!draft.editOf && (!original || !draft.editBase || draft.editBase !== JSON.stringify(original))
+    if (changed && !window.confirm('La fiche d’origine a changé ou n’est plus disponible. Enregistrer ce brouillon comme nouvelle fiche, sans remplacer l’original ?')) { saveLock.current = false; return }
+    let finalId = changed ? draft.id : draft.editOf ?? draft.id
+    if (owner && (changed || !draft.editOf)) {
+      try { finalId = uniqueTastingId(storeRef.current) }
+      catch { setError('Impossible de créer une nouvelle fiche sans risque de doublon. Le brouillon est conservé.'); saveLock.current = false; return }
+    }
+    const final = { ...draft, id: finalId, editOf: undefined, editBase: undefined }
+    const drafts = owner ? storeRef.current.drafts.map(item => item.id === draft.id ? { ...item, editOf: final.id, editBase: JSON.stringify(final) } : item) : storeRef.current.drafts.filter(item => item.id !== draft.id)
+    const next = { ...storeRef.current, drafts, records: [final, ...storeRef.current.records.filter(item => item.id !== final.id)] }
+    if (await updateStore(next, true)) { setId(final.id); setView('detail'); setMessage(owner ? 'Ta fiche est enregistrée. Le brouillon reste disponible par précaution ; tu peux le supprimer après vérification de la synchronisation.' : 'Ta fiche est enregistrée.') }
     saveLock.current = false
   }
   const editRecord = (item: TastingRecord, duplicate = false) => {
     const existing = !duplicate && storeRef.current.drafts.find(entry => entry.editOf === item.id)
     if (existing) { setId(existing.id); setView('edit'); return }
-    const copy = { ...structuredClone(item), id: crypto.randomUUID(), editOf: duplicate ? undefined : item.id, ...(duplicate ? { date: new Date().toLocaleDateString('sv-SE'), aromas: [], actual: '', acidity: '', bitterness: '', sweetness: '', body: '', finish: '', appreciation: '', notes: '', nextTime: '' } : {}) }
+    const copy = { ...structuredClone(item), id: crypto.randomUUID(), editOf: duplicate ? undefined : item.id, editBase: duplicate ? undefined : JSON.stringify(item), ...(duplicate ? { date: new Date().toLocaleDateString('sv-SE'), aromas: [], actual: '', acidity: '', bitterness: '', sweetness: '', body: '', finish: '', appreciation: '', notes: '', nextTime: '' } : {}) }
     updateStore({ ...storeRef.current, drafts: [...storeRef.current.drafts, copy] }, false); setId(copy.id); setView('edit'); setMessage('')
   }
   const exportData = () => { const url = URL.createObjectURL(new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = 'coffee-101-carnet.json'; link.click(); URL.revokeObjectURL(url) }
+  const mergeGuest = async () => {
+    if (!window.confirm('Copier les fiches et brouillons locaux dans ce compte ? Les originaux restent sur cet appareil. Répéter cette action crée de nouvelles copies.')) return
+    const epoch = authEpoch.current
+    try {
+      const guest = await loadStore()
+      if (authEpoch.current !== epoch || current.current?.user.id !== owner) return
+      const ids = new Map([...guest.drafts, ...guest.records].map(item => [item.id, crypto.randomUUID()]))
+      for (const draft of guest.drafts) if (draft.editOf && !ids.has(draft.editOf)) ids.set(draft.editOf, crypto.randomUUID())
+      const copy = (item: TastingRecord) => ({ ...structuredClone(item), id: ids.get(item.id)!, editOf: item.editOf ? ids.get(item.editOf) : item.editOf })
+      const copiedRecords = guest.records.map(copy)
+      const copiedDrafts = guest.drafts.map(draft => {
+        const result = copy(draft)
+        const original = guest.records.find(record => record.id === draft.editOf)
+        const copiedOriginal = copiedRecords.find(record => record.id === result.editOf)
+        if (original && copiedOriginal && draft.editBase === JSON.stringify(original)) result.editBase = JSON.stringify(copiedOriginal)
+        return result
+      })
+      if (await updateStore({ version: 1, drafts: [...storeRef.current.drafts, ...copiedDrafts], records: [...storeRef.current.records, ...copiedRecords] })) setMessage('Copies ajoutées à ce compte. Les originaux locaux sont conservés.')
+    } catch { setError('Impossible de lire le carnet local. Aucune copie n’a été créée.') }
+  }
+  const resolveConflicts = async () => {
+    if (!session || transactionLock.current || blocked.current) return
+    if (!window.confirm('Récupérer les versions du compte et conserver les versions locales en nouvelles copies ? Les suppressions locales en conflit seront annulées. Exporte d’abord ton carnet si nécessaire.')) return
+    const epoch = authEpoch.current
+    transactionLock.current = true
+    setCommitting(true)
+    latest.current++
+    markNotebookPending(owner)
+    setSyncMessage('Résolution en cours ; la synchronisation n’est pas encore confirmée.')
+    try {
+      await writes.current
+      const isCurrent = () => authEpoch.current === epoch && !blocked.current && current.current?.user.id === owner
+      const resolved = await resolveNotebookConflicts(owner, notebookClient(session.access_token), isCurrent)
+      if (!isCurrent()) return
+      storeRef.current = resolved; setStore(resolved); setConflictCount(0); setConflictDetails([]); setError(''); setView('library')
+      setMessage('Versions locales conservées en copies et versions du compte récupérées.')
+      setSyncTick(value => value + 1)
+    } catch { if (current.current?.user.id === owner) setError('Impossible de résoudre ce conflit pour le moment. Rien n’a été remplacé ; exporte ton carnet et réessaie après reconnexion.') }
+    finally { transactionLock.current = false; setCommitting(false) }
+  }
+  const exportConflicts = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(conflictDetails.map(item => ({ id: item.id, versionDuCompte: item.remote })), null, 2)], { type: 'application/json' }))
+    const link = document.createElement('a'); link.href = url; link.download = 'coffee-101-conflits-compte.json'; link.click(); URL.revokeObjectURL(url)
+  }
   const importData = async (file: File | undefined) => {
     if (!file) return
+    const epoch = authEpoch.current
     setFileName(file.name)
     setImportError('')
-    try { const data: unknown = JSON.parse(await file.text()); if (!isStore(data)) throw new Error(); if (window.confirm('Remplacer le carnet de ce navigateur par le fichier importé ? Exporte d’abord tes fiches si nécessaire.')) { blocked.current = false; if (await updateStore(data, true)) { setView('library'); setMessage('Carnet importé.') } } } catch { setImportError('Import impossible : fichier invalide ou version non prise en charge.') }
+    try { const data: unknown = JSON.parse(await file.text()); if (!isStore(data)) throw new Error(); if (authEpoch.current !== epoch || (owner ? current.current?.user.id !== owner : !!current.current)) return; if (window.confirm('Remplacer ce carnet, y compris les brouillons, par le fichier importé ? Les suppressions seront synchronisées si tu es connecté. Exporte d’abord tes fiches si nécessaire.')) { if (await updateStore(data, true)) { setView('library'); setMessage('Carnet importé.') } } } catch { setImportError('Import impossible : fichier invalide ou version non prise en charge.') }
   }
   const results = [...store.records].filter(item => (!filter || item.proposal?.choices.method === filter) && `${title(item)} ${item.country} ${item.aromas.map(aroma => aroma.label).join(' ')}`.toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr'))).sort((a, b) => b.date.localeCompare(a.date))
   if (!ready) return <main id={active ? 'main' : undefined} className="tasting wrap"><p role="status">Chargement du carnet…</p></main>
-  return <main id={active ? 'main' : undefined} className="tasting wrap" inert={committing || undefined} aria-busy={committing}><p className="kicker">03 / DÉGUSTER</p>{error && <p className="tasting-error" role="alert">{error}</p>}{message && <p className="tasting-success" role="status">{message}</p>}
+  return <main id={active ? 'main' : undefined} className="tasting wrap" inert={committing || undefined} aria-busy={committing}><p className="kicker">03 / DÉGUSTER</p>{error && <p className="tasting-error" role="alert">{error}</p>}{message && <p className="tasting-success" role="status">{message}</p>}<p aria-live="polite">{owner ? syncMessage || 'Carnet de ce compte sur cet appareil.' : 'Carnet local, non synchronisé. Si ta session a expiré, reconnecte-toi pour retrouver le carnet de ton compte.'}</p>{owner && conflictCount > 0 && <section className="tasting-panel" aria-label="Conflits du carnet"><h2>Comparer les versions</h2><p>Les modifications locales restent sur cet appareil. Les versions affichées datent de la dernière vérification et peuvent avoir changé.</p>{conflictDetails.map((conflict, index) => <details key={conflict.id}><summary>Conflit {index + 1}</summary>{conflict.local ? <ConflictVersion label="Version locale" value={conflict.local.choices} deleted={conflict.local.deleted} /> : <p>Aucune version locale disponible.</p>}{conflict.remote === undefined ? <p>Version du compte pas encore récupérée.</p> : conflict.remote === null ? <p>Version du compte introuvable.</p> : conflict.remoteRecognized && isNotebookPayload(conflict.remote.choices) ? <ConflictVersion label="Version du compte" value={conflict.remote.choices} deleted={conflict.remote.deleted} /> : isTechnicalPlaceholder(conflict.remote) ? <p>Une entrée supprimée de version initiale existe sur le compte. Elle ne prouve pas une suppression volontaire et reste intacte.</p> : <p>Version du compte non reconnue ou incohérente ; elle reste intacte.</p>}</details>)}<p>Télécharge les versions du compte et exporte aussi ton carnet local avant de résoudre un conflit.</p><button type="button" className="tasting-secondary" onClick={exportConflicts}>Télécharger les versions du compte</button> <button type="button" className="tasting-secondary" onClick={() => void resolveConflicts()}>Résoudre les conflits en conservant des copies</button></section>}
     {view === 'library' && <><div className="tasting-heading"><div><h1>Ma bibliothèque<span>.</span></h1><p>Tes cafés, tes impressions, une tasse à la fois.</p></div>{store.records.length > 0 && <SpecularButton className="tasting-primary" radius={4} tint="#301d16" tintOpacity={1} lineColor="#e5b580" autoAnimate={false} onClick={() => { if (store.drafts.length) { setPending(null); setChooseDraft(true) } else create() }}><Plus aria-hidden="true" /> Nouvelle dégustation</SpecularButton>}</div>
       {chooseDraft && store.drafts.length > 0 && <div className="tasting-panel"><h2>Un brouillon existe déjà</h2><p>Reprends-le ou commence une autre fiche{pending ? ' avec cette recette' : ''}. Aucun brouillon ne sera écrasé.</p><button type="button" className="tasting-secondary" onClick={() => { setId(store.drafts[0].id); setView('edit'); setPending(null); setChooseDraft(false) }}>Reprendre le brouillon</button> <button type="button" className="tasting-secondary" onClick={() => { create(pending); setPending(null); setChooseDraft(false) }}>Commencer une autre fiche</button></div>}
       {store.drafts.length > 0 && <section className="tasting-drafts"><h2>Mes brouillons</h2>{store.drafts.map(item => <div key={item.id}><button type="button" onClick={() => { setId(item.id); setView('edit') }}>Reprendre : {title(item)}</button><button type="button" onClick={() => { if (window.confirm('Supprimer ce brouillon ?')) updateStore({ ...storeRef.current, drafts: storeRef.current.drafts.filter(entry => entry.id !== item.id) }, true) }}>Supprimer</button></div>)}<button type="button" onClick={() => create()}>Commencer une autre fiche</button></section>}
       {store.records.length === 0 ? <div className="tasting-empty"><div className="tasting-empty-mark"><BrandMark /></div><div><h2>La première page t’attend.</h2><p>Garde une trace de tes découvertes, à ton rythme.</p><div className="tasting-empty-actions"><SpecularButton className="tasting-primary" radius={4} tint="#301d16" tintOpacity={1} lineColor="#e5b580" autoAnimate={false} onClick={() => { if (store.drafts.length) { setPending(null); setChooseDraft(true) } else create() }}><Plus aria-hidden="true" /> Créer ma première fiche</SpecularButton><button type="button" className="tasting-link" onClick={onReturn}>Aller à Préparer <ArrowRight aria-hidden="true" /></button></div></div></div> : <Collection results={results} total={store.records.length} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} open={item => { setId(item.id); setView('detail'); setMessage('') }} />}
-      <details className="tasting-data"><summary>Mon carnet</summary><p>Tes fiches sont enregistrées dans ce navigateur. Pense à les exporter pour les sauvegarder.</p><div className="tasting-data-actions"><button type="button" className="tasting-secondary" onClick={exportData}><Download aria-hidden="true" /> Exporter mon carnet</button><label className="tasting-import"><FileUp aria-hidden="true" /> Choisir un carnet à importer<input type="file" accept="application/json,.json" onChange={event => { void importData(event.target.files?.[0]); event.target.value = '' }} /></label></div>{fileName && <p className="tasting-filename">Fichier choisi : {fileName}</p>}{importError && <p className="tasting-error" role="alert">{importError}</p>}</details></>}
+      <details className="tasting-data"><summary>Mon carnet</summary><p>Tes fiches sont enregistrées dans ce navigateur. Pense à les exporter pour les sauvegarder.</p><div className="tasting-data-actions"><button type="button" className="tasting-secondary" onClick={exportData}><Download aria-hidden="true" /> Exporter mon carnet</button><label className="tasting-import"><FileUp aria-hidden="true" /> Choisir un carnet à importer<input type="file" accept="application/json,.json" onChange={event => { void importData(event.target.files?.[0]); event.target.value = '' }} /></label>{owner && <button type="button" className="tasting-secondary" onClick={() => void mergeGuest()}>Copier le carnet local dans ce compte</button>}</div>{fileName && <p className="tasting-filename">Fichier choisi : {fileName}</p>}{importError && <p className="tasting-error" role="alert">{importError}</p>}</details></>}
     {view === 'edit' && draft && <><button type="button" className="tasting-link" onClick={() => setView('library')}>← Ma bibliothèque</button><div className="tasting-heading"><div><h1>{draft.editOf ? 'Modifier ma fiche' : 'Nouvelle dégustation'}<span>.</span></h1><p>Tous les champs sont facultatifs. Prends ton temps.</p></div><p role="status">{error ? 'Brouillon non enregistré' : saving ? 'Enregistrement en cours…' : 'Brouillon enregistré'}</p></div>
       <section className="tasting-panel"><p className="kicker">01 / LE CAFÉ</p><h2>Parle-nous de ton café</h2><div className="tasting-fields">{([['name', 'Nom du café'], ['roaster', 'Torréfacteur'], ['date', 'Date de dégustation'], ['country', 'Pays d’origine'], ['region', 'Région ou ferme'], ['altitude', 'Altitude ou plage d’altitude']] as const).map(([key, label]) => <label key={key}>{label}<input type={key === 'date' ? 'date' : 'text'} value={draft[key]} placeholder={key === 'altitude' ? 'Ex. 1 400–1 800 m, ou inconnu' : undefined} onChange={event => edit({ [key]: event.target.value })} /></label>)}<label>Traitement principal<select value={draft.processing} onChange={event => edit({ processing: event.target.value })}><option value="">Je ne sais pas</option>{['Lavé', 'Nature', 'Honey et pulped natural', 'Wet-hulled', 'Autre'].map(option => <option key={option}>{option}</option>)}</select></label>{draft.processing === 'Autre' && <label>Préciser le traitement<input value={draft.processingOther} onChange={event => edit({ processingOther: event.target.value })} /></label>}<label>Fermentation particulière<input value={draft.fermentation} placeholder="Je ne sais pas" onChange={event => edit({ fermentation: event.target.value })} /></label><label>Torréfaction<select value={draft.roast} onChange={event => edit({ roast: event.target.value })}><option value="">Je ne sais pas</option><option>Claire</option><option>Moyenne</option><option>Foncée</option></select></label></div></section>
       <section className="tasting-panel"><p className="kicker">02 / LA PRÉPARATION</p><h2>Recette proposée</h2>{draft.proposal ? <><p>{methodName(draft)} · Torréfaction : {draft.roast || 'inconnue'} · Intention : {draft.proposal.choices.profile === 'round' ? 'Rond & gourmand' : 'Expressif & complexe'}</p><dl className="tasting-parameters">{draft.proposal.parameters.map((parameter, index) => <div key={index}><dt>{parameter.label}</dt><dd>{parameter.value}</dd></div>)}</dl><details><summary>Voir les étapes et indications</summary><ol>{draft.proposal.recipe.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>{draft.proposal.recipe.assumptions.map(text => <p key={text}>{text}</p>)}</details></> : <p>Aucune recette proposée.</p>}<h3>Ce que j’ai réellement préparé</h3><p>Ces paramètres ne sont pas confirmés automatiquement. Ajoute ou corrige uniquement ce que tu connais.</p>{draft.proposal && <button type="button" className="tasting-secondary" onClick={() => { if (!draft.actual || window.confirm('Remplacer les paramètres saisis par la proposition ?')) edit({ actual: draft.proposal!.parameters.map(parameter => `${parameter.label} : ${parameter.value}`).join('\n') }) }}>Confirmer la proposition comme point de départ</button>}<label>Paramètres réellement utilisés<textarea rows={5} value={draft.actual} placeholder="Non renseignés" onChange={event => edit({ actual: event.target.value })} /></label></section>

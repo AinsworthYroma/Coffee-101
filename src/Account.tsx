@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { initializeAuth, redirectUrl, supabase, updateRecoveryPassword } from './auth'
+import { notebookActivity, observeNotebookActivity } from './notebookActivity'
+import { notebookQueueLength } from './notebookSync'
+import { observeAuth } from './sharedAuth'
 import './account.css'
 
 type Mode = 'signin' | 'signup' | 'resend' | 'reset' | 'recovery'
@@ -26,14 +29,30 @@ export default function Account() {
   const [confirmation, setConfirmation] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [, setActivityRevision] = useState(0)
   const submitting = useRef(false)
+  const observedSession = useRef<Session | null>(null)
+  const authEpoch = useRef(0)
   const recoveryUser = useRef<string | null>(null)
   const recoveryVersion = useRef(0)
+  useEffect(() => observeNotebookActivity(() => setActivityRevision(value => value + 1)), [])
 
   useEffect(() => {
     let active = true
-    const subscription = supabase?.auth.onAuthStateChange((event, next) => {
+    let latestSession: Session | null | undefined
+    const unsubscribe = observeAuth((event, next) => {
       if (!active) return
+      authEpoch.current++
+      latestSession = next
+      const previousOwner = observedSession.current?.user.id ?? ''
+      if (previousOwner !== (next?.user.id ?? '')) {
+        const activity = notebookActivity(previousOwner)
+        if (activity.pending || activity.failed || (previousOwner && activity.queue !== 'empty')) {
+          setOpen(true)
+          setError('Le carnet précédent contient un travail en attente ou non enregistré. Reviens à ce carnet sans fermer la page pour le vérifier et l’exporter.')
+        }
+      }
+      observedSession.current = next
       setSession(next)
       if (event === 'PASSWORD_RECOVERY' && next) { recoveryVersion.current++; recoveryUser.current = next.user.id; rememberRecovery(next.user.id); setMode('recovery'); setOpen(true) }
       else if (recoveryUser.current && next?.user.id !== recoveryUser.current) {
@@ -41,11 +60,14 @@ export default function Account() {
         setError('La session a changé. Demande un nouveau lien de réinitialisation.')
       }
       if (event === 'SIGNED_OUT') { recoveryVersion.current++; recoveryUser.current = null; rememberRecovery(null); setMode('signin') }
-    }).data.subscription
+    })
     void initializeAuth().then(result => {
       if (!active) return
-      setSession(result.session)
       setLoading(false)
+      if (latestSession !== undefined && latestSession?.user.id !== result.session?.user.id) return
+      const initialSession = latestSession === undefined ? result.session : latestSession
+      observedSession.current = initialSession
+      setSession(initialSession)
       if (result.callback) {
         setOpen(true)
         if (result.callback === 'recovery' && result.session) { recoveryVersion.current++; recoveryUser.current = result.session.user.id; rememberRecovery(result.session.user.id); setMode('recovery') }
@@ -54,7 +76,7 @@ export default function Account() {
       } else if (result.failed) setError('Impossible de retrouver la session. Vérifie ta connexion et réessaie.')
       else if (result.session && recoveryOwner() === result.session.user.id) { recoveryVersion.current++; recoveryUser.current = result.session.user.id; setMode('recovery'); setOpen(true) }
     })
-    return () => { active = false; subscription?.unsubscribe() }
+    return () => { active = false; unsubscribe() }
   }, [])
 
   const changeMode = (next: Mode) => { setMode(next); setPassword(''); setConfirmation(''); setMessage(''); setError('') }
@@ -97,20 +119,34 @@ export default function Account() {
   }
   const signOut = async () => {
     if (!supabase || submitting.current) return
+    const owner = session?.user.id
+    const epoch = authEpoch.current
     submitting.current = true; setBusy(true); setError(''); setMessage('')
     try {
+      let queued = 0
+      try { if (owner) queued = await notebookQueueLength(owner) } catch { queued = 1 }
+      if (authEpoch.current !== epoch || observedSession.current?.user.id !== owner) return
+      const activity = notebookActivity(owner ?? '')
+      if ((activity.pending || activity.failed || queued > 0 || (owner && activity.queue !== 'empty')) && !window.confirm('Des modifications du carnet ne sont pas enregistrées ou leur synchronisation n’est pas confirmée. Déconnecter quand même ? Elles restent liées à ce compte sur cet appareil ; reconnecte-toi sans fermer cette page pour vérifier et exporter tout travail non enregistré.')) return
       const { error } = await supabase.auth.signOut({ scope: 'local' })
       if (error) throw error
-      recoveryVersion.current++; recoveryUser.current = null; rememberRecovery(null); setSession(null); changeMode('signin'); setMessage('Tu es déconnecté.')
+      recoveryVersion.current++; recoveryUser.current = null; rememberRecovery(null); observedSession.current = null; setSession(null); changeMode('signin'); setMessage('Tu es déconnecté.')
     } catch { setError('Déconnexion impossible. Vérifie ta connexion et réessaie.') }
     finally { submitting.current = false; setBusy(false) }
   }
 
+  const activity = notebookActivity(session?.user.id ?? '')
+  const notice = !session ? 'Ton carnet local n’est pas synchronisé avec un compte.' :
+    activity.pending || activity.failed ? 'Certaines modifications ne sont pas encore enregistrées ou synchronisées.' :
+    activity.queue === 'pending' ? 'Des modifications ne sont pas encore synchronisées avec ce compte.' :
+    activity.sync === 'ready' && activity.queue === 'empty' ? 'Dernière synchronisation confirmée ; aucune modification locale en attente.' :
+    activity.sync === 'problem' ? 'La synchronisation n’est pas confirmée. Vérifie la connexion et consulte ton carnet.' :
+    'Ton carnet n’est pas encore confirmé comme synchronisé avec ce compte.'
   return <>
     <button className="account-entry" type="button" aria-expanded={open} aria-controls="account-panel" onClick={() => setOpen(value => !value)}>Mon compte</button>
     <section className="account-panel" id="account-panel" aria-labelledby="account-title" hidden={!open}>
       <div className="account-heading"><h2 id="account-title">{session && mode !== 'recovery' ? 'Mon compte' : titles[mode]}</h2><button type="button" onClick={() => setOpen(false)} aria-label="Fermer le compte">×</button></div>
-      <p>Ton carnet reste sur cet appareil et n’est pas synchronisé avec ton compte.</p>
+      <p aria-live="polite">{notice}</p><p>Le carnet de ton compte est distinct du carnet local. Les fiches locales ne sont copiées vers ton compte qu’avec ton accord. Pense à exporter tes données régulièrement.</p>
       {message && <p className="account-message" role="status">{message}</p>}
       {error && <p className="account-error" role="alert">{error}</p>}
       {!supabase ? <p>Le compte n’est pas configuré. Tu peux continuer à utiliser le carnet local.</p> : loading ? <p role="status">Chargement du compte…</p> : session && mode !== 'recovery' ? <>

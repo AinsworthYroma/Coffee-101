@@ -1,16 +1,18 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import Account from './Account'
+import { acknowledgeNotebookSync, beginNotebookSession, failNotebookSync, finishNotebookSync, finishNotebookWrite, startNotebookWrite } from './notebookActivity'
 
 const mocks = vi.hoisted(() => ({
-  initializeAuth: vi.fn(), updateRecoveryPassword: vi.fn(),
+  initializeAuth: vi.fn(), updateRecoveryPassword: vi.fn(), queueLength: vi.fn(),
   auth: {
     onAuthStateChange: vi.fn(), signInWithPassword: vi.fn(), signUp: vi.fn(), resend: vi.fn(),
     resetPasswordForEmail: vi.fn(), updateUser: vi.fn(), signOut: vi.fn(),
   },
 }))
+vi.mock('./notebookSync', () => ({ notebookQueueLength: mocks.queueLength }))
 vi.mock('./auth', () => ({
   supabase: { auth: mocks.auth },
   initializeAuth: mocks.initializeAuth,
@@ -24,14 +26,17 @@ const unsubscribe = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  beginNotebookSession(session.user.id)
   sessionStorage.clear()
   mocks.initializeAuth.mockResolvedValue({ session: null, callback: null, failed: false })
+  mocks.queueLength.mockResolvedValue(0)
   mocks.updateRecoveryPassword.mockResolvedValue(undefined)
   mocks.auth.onAuthStateChange.mockImplementation(callback => { listener = callback; return { data: { subscription: { unsubscribe } } } })
   for (const fn of [mocks.auth.signInWithPassword, mocks.auth.resend, mocks.auth.resetPasswordForEmail, mocks.auth.updateUser, mocks.auth.signOut]) fn.mockResolvedValue({ error: null })
   mocks.auth.signUp.mockResolvedValue({ data: { session: null }, error: null })
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 async function openAccount() {
   render(<Account />)
@@ -43,6 +48,87 @@ function fillEmail() { fireEvent.change(screen.getByLabelText('Adresse e-mail'),
 function fillPassword(label = 'Mot de passe') { fireEvent.change(screen.getByLabelText(label, { exact: true }), { target: { value: 'password123' } }) }
 
 describe('compte', () => {
+  it('ne confirme la synchronisation qu’après un accusé et une vérification sans attente', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    expect(await screen.findByText(/n’est pas encore confirmé comme synchronisé/)).toBeInTheDocument()
+    act(() => { acknowledgeNotebookSync(session.user.id); finishNotebookSync(session.user.id, 0, false, true) })
+    expect(await screen.findByText(/Dernière synchronisation confirmée/)).toBeInTheDocument()
+    act(() => failNotebookSync(session.user.id))
+    expect(await screen.findByText(/La synchronisation n’est pas confirmée/)).toBeInTheDocument()
+  })
+  it('avertit avant de déconnecter des modifications enregistrées mais non synchronisées', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    vi.mocked(window.confirm).mockReturnValue(false)
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    await screen.findByText(/Connecté avec/)
+    act(() => { startNotebookWrite(session.user.id); finishNotebookWrite(session.user.id, true) })
+    expect(await screen.findByText(/Des modifications ne sont pas encore synchronisées/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('synchronisation n’est pas confirmée')))
+    expect(mocks.auth.signOut).not.toHaveBeenCalled()
+  })
+  it('vérifie la file persistée avant la déconnexion, même si le dernier état affiché était à jour', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    mocks.queueLength.mockResolvedValue(1)
+    vi.mocked(window.confirm).mockReturnValue(false)
+    acknowledgeNotebookSync(session.user.id)
+    finishNotebookSync(session.user.id, 0, false, true)
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    await screen.findByText(/Dernière synchronisation confirmée/)
+    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled())
+    expect(mocks.auth.signOut).not.toHaveBeenCalled()
+  })
+  it('ne déconnecte pas un nouveau compte après une vérification différée', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    let resolve!: (value: number) => void
+    mocks.queueLength.mockReturnValue(new Promise(res => { resolve = res }))
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    await screen.findByText(/Connecté avec/)
+    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }))
+    act(() => listener('SIGNED_IN', { user: { id: 'user-2', email: 'autre@example.test' } } as Session))
+    await act(async () => resolve(0))
+    expect(mocks.auth.signOut).not.toHaveBeenCalled()
+    expect(await screen.findByText(/Connecté avec autre@example.test/)).toBeInTheDocument()
+  })
+  it('demande confirmation avant une déconnexion avec des écritures locales en cours', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    await screen.findByText(/Connecté avec/)
+    startNotebookWrite(session.user.id)
+    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled())
+    expect(mocks.auth.signOut).not.toHaveBeenCalled()
+    finishNotebookWrite(session.user.id, true)
+  })
+  it('signale une déconnexion externe pendant une écriture locale', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    await screen.findByText(/Connecté avec/)
+    startNotebookWrite(session.user.id)
+    act(() => listener('SIGNED_OUT', null))
+    expect(await screen.findByRole('alert')).toHaveTextContent('travail en attente')
+    finishNotebookWrite(session.user.id, true)
+  })
+  it('ne restaure pas une ancienne session après une déconnexion pendant l’initialisation', async () => {
+    let resolve!: (value: { session: Session; callback: null; failed: false }) => void
+    mocks.initializeAuth.mockReturnValue(new Promise(res => { resolve = res }))
+    render(<Account />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
+    act(() => listener('SIGNED_OUT', null))
+    await act(async () => resolve({ session, callback: null, failed: false }))
+    expect(await screen.findByRole('heading', { name: 'Se connecter' })).toBeInTheDocument()
+    expect(screen.queryByText(/Connecté avec/)).not.toBeInTheDocument()
+  })
+
   it('connecte, suit le renouvellement de session et déconnecte sans perdre le carnet', async () => {
     localStorage.setItem('coffee101-tasting-draft', 'notes locales')
     await openAccount()
