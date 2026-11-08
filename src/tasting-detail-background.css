@@ -1,0 +1,28 @@
+/* Only an open detail in the currently visible account removes the kraft. */
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail){--detail-live-ink:#fff0dc;--detail-live-muted:#ead0ae;--detail-live-label:#dfb887}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .preview-surface{background:transparent}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .preview-surface::before{display:none}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting{color:var(--detail-live-ink)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting>.kicker{color:var(--detail-live-label)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting>p:not(.tasting-error):not(.tasting-success):not(.kicker){color:var(--detail-live-muted);text-shadow:0 1px 5px #160c08b3}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail{color:var(--detail-live-ink)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail>.tasting-link{color:var(--detail-live-muted)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(.tasting-detail-head,.detail-wheel,.detail-impressions,.detail-recipe){background:radial-gradient(380px circle at var(--detail-light-x) var(--detail-light-y),rgb(255 219 161 / var(--detail-glow)),transparent 74%),linear-gradient(135deg,#97663226,#20130b73);border-color:#f5d4a447;box-shadow:inset 0 1px 0 #ffe4ba47,inset 0 -1px 0 #1b100733,0 12px 32px #0d070626;backdrop-filter:blur(12px) brightness(.72) saturate(1.08);-webkit-backdrop-filter:blur(12px) brightness(.72) saturate(1.08)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(h1,h2,h3){color:var(--detail-live-ink)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .kicker{color:var(--detail-live-label)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(.detail-origin,.detail-family-list,.detail-note p,.detail-actual>p){color:var(--detail-live-muted)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(.detail-identity-list,.detail-observations) dt{color:var(--detail-live-label)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(.detail-identity-list,.detail-observations) dd{color:var(--detail-live-ink)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(.detail-identity-list,.detail-observations>div,.detail-note,.detail-actual){border-color:#e5ba8433}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .tasting-actions .tasting-secondary{color:var(--detail-live-ink);border-color:#e6be8859;background:#f6d9a514}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-impressions .aroma-tags span{color:var(--detail-live-ink);border-color:#eac68f59;background:linear-gradient(135deg,#ffdfaa26,#b0783a1f)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-recipe>p:not(.kicker){color:var(--detail-live-muted)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-recipe .tasting-parameters>div{border-color:#f2cb933d;background:linear-gradient(135deg,#e3b7791a,#28180d26);box-shadow:inset 0 1px 0 #ffe6bf26}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-recipe .tasting-parameters dt{color:var(--detail-live-label)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-recipe .tasting-parameters dd{color:var(--detail-live-ink)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-recipe details{border-color:#e5ba8433}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-recipe summary{color:var(--detail-live-muted)}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail .detail-delete button{color:#f0bfa5}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(a,button,summary):focus-visible{outline-color:#f3ce99}
+.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(.tasting-detail-head,.detail-wheel,.detail-impressions,.detail-recipe):focus-within{outline-color:#f3ce99}
+@supports not ((backdrop-filter:blur(12px)) or (-webkit-backdrop-filter:blur(12px))){.app-shell--deguster:has([data-notebook]:not([hidden]) .tasting-detail) .tasting .tasting-detail :is(.tasting-detail-head,.detail-wheel,.detail-impressions,.detail-recipe){background:linear-gradient(135deg,#48301fe8,#281b12eb)}}
