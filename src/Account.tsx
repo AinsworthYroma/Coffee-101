@@ -28,18 +28,19 @@ export default function Account() {
   const [error, setError] = useState('')
   const submitting = useRef(false)
   const recoveryUser = useRef<string | null>(null)
+  const recoveryVersion = useRef(0)
 
   useEffect(() => {
     let active = true
     const subscription = supabase?.auth.onAuthStateChange((event, next) => {
       if (!active) return
       setSession(next)
-      if (event === 'PASSWORD_RECOVERY' && next) { recoveryUser.current = next.user.id; rememberRecovery(next.user.id); setMode('recovery'); setOpen(true) }
+      if (event === 'PASSWORD_RECOVERY' && next) { recoveryVersion.current++; recoveryUser.current = next.user.id; rememberRecovery(next.user.id); setMode('recovery'); setOpen(true) }
       else if (recoveryUser.current && next?.user.id !== recoveryUser.current) {
-        recoveryUser.current = null; rememberRecovery(null); setMode('signin')
+        recoveryVersion.current++; recoveryUser.current = null; rememberRecovery(null); setMode('signin')
         setError('La session a changé. Demande un nouveau lien de réinitialisation.')
       }
-      if (event === 'SIGNED_OUT') { recoveryUser.current = null; rememberRecovery(null); setMode('signin') }
+      if (event === 'SIGNED_OUT') { recoveryVersion.current++; recoveryUser.current = null; rememberRecovery(null); setMode('signin') }
     }).data.subscription
     void initializeAuth().then(result => {
       if (!active) return
@@ -47,11 +48,11 @@ export default function Account() {
       setLoading(false)
       if (result.callback) {
         setOpen(true)
-        if (result.callback === 'recovery' && result.session) { recoveryUser.current = result.session.user.id; rememberRecovery(result.session.user.id); setMode('recovery') }
+        if (result.callback === 'recovery' && result.session) { recoveryVersion.current++; recoveryUser.current = result.session.user.id; rememberRecovery(result.session.user.id); setMode('recovery') }
         else if (result.callback === 'confirm') setMessage('Ton adresse a été confirmée.')
         else setError('Ce lien est invalide ou a expiré. Demande un nouveau lien.')
       } else if (result.failed) setError('Impossible de retrouver la session. Vérifie ta connexion et réessaie.')
-      else if (result.session && recoveryOwner() === result.session.user.id) { recoveryUser.current = result.session.user.id; setMode('recovery'); setOpen(true) }
+      else if (result.session && recoveryOwner() === result.session.user.id) { recoveryVersion.current++; recoveryUser.current = result.session.user.id; setMode('recovery'); setOpen(true) }
     })
     return () => { active = false; subscription?.unsubscribe() }
   }, [])
@@ -62,6 +63,7 @@ export default function Account() {
     if (!supabase || submitting.current) return
     if ((mode === 'signup' || mode === 'recovery') && password !== confirmation) { setError('Les mots de passe ne correspondent pas.'); return }
     submitting.current = true
+    const recoveryAttempt = recoveryVersion.current
     setBusy(true); setError(''); setMessage('')
     try {
       if (mode === 'signin') {
@@ -82,21 +84,24 @@ export default function Account() {
         if (error && !['user_not_found', 'email_not_found'].includes(error.code ?? '')) throw error
         setMessage(emailMessage)
       } else {
-        if (!recoveryUser.current) throw new Error('Recovery session missing')
-        await updateRecoveryPassword(recoveryUser.current, password)
+        const owner = recoveryUser.current
+        const version = recoveryVersion.current
+        if (!owner) throw new Error('Recovery session missing')
+        await updateRecoveryPassword(owner, password, () => recoveryUser.current === owner && recoveryVersion.current === version)
+        if (recoveryUser.current !== owner || recoveryVersion.current !== version) return
         recoveryUser.current = null; rememberRecovery(null); setPassword(''); setConfirmation(''); setMode('signin'); setMessage('Ton mot de passe a été modifié.')
       }
     } catch {
-      setError(mode === 'signin' ? 'Connexion impossible. Vérifie tes identifiants et ta connexion, puis réessaie.' : 'La demande n’a pas abouti. Vérifie ta connexion et réessaie plus tard.')
+      if (mode !== 'recovery' || recoveryVersion.current === recoveryAttempt) setError(mode === 'signin' ? 'Connexion impossible. Vérifie tes identifiants et ta connexion, puis réessaie.' : 'La demande n’a pas abouti. Vérifie ta connexion et réessaie plus tard.')
     } finally { submitting.current = false; setBusy(false) }
   }
   const signOut = async () => {
     if (!supabase || submitting.current) return
     submitting.current = true; setBusy(true); setError(''); setMessage('')
     try {
-      const { error } = await supabase.auth.signOut()
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
       if (error) throw error
-      recoveryUser.current = null; rememberRecovery(null); setSession(null); changeMode('signin'); setMessage('Tu es déconnecté.')
+      recoveryVersion.current++; recoveryUser.current = null; rememberRecovery(null); setSession(null); changeMode('signin'); setMessage('Tu es déconnecté.')
     } catch { setError('Déconnexion impossible. Vérifie ta connexion et réessaie.') }
     finally { submitting.current = false; setBusy(false) }
   }

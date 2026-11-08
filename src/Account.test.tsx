@@ -37,6 +37,7 @@ async function openAccount() {
   render(<Account />)
   fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }))
   await screen.findByRole('heading', { name: 'Se connecter' })
+  await screen.findByLabelText('Adresse e-mail')
 }
 function fillEmail() { fireEvent.change(screen.getByLabelText('Adresse e-mail'), { target: { value: ' cafe@example.test ' } }) }
 function fillPassword(label = 'Mot de passe') { fireEvent.change(screen.getByLabelText(label, { exact: true }), { target: { value: 'password123' } }) }
@@ -104,7 +105,7 @@ describe('compte', () => {
     fillPassword('Nouveau mot de passe')
     fireEvent.change(screen.getByLabelText('Confirmer le mot de passe'), { target: { value: 'password123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer le mot de passe' }))
-    await waitFor(() => expect(mocks.updateRecoveryPassword).toHaveBeenCalledWith('user-1', 'password123'))
+    await waitFor(() => expect(mocks.updateRecoveryPassword).toHaveBeenCalledWith('user-1', 'password123', expect.any(Function)))
     expect(await screen.findByText('Ton mot de passe a été modifié.')).toBeInTheDocument()
   })
 
@@ -155,12 +156,28 @@ describe('compte', () => {
     expect(mocks.updateRecoveryPassword).not.toHaveBeenCalled()
   })
 
+  it('ne montre pas de succès périmé après un changement de session', async () => {
+    let resolve!: () => void
+    mocks.updateRecoveryPassword.mockReturnValue(new Promise<void>(done => { resolve = done }))
+    mocks.initializeAuth.mockResolvedValue({ session, callback: 'recovery', failed: false })
+    render(<Account />)
+    await screen.findByRole('heading', { name: 'Choisir un nouveau mot de passe' })
+    fillPassword('Nouveau mot de passe')
+    fireEvent.change(screen.getByLabelText('Confirmer le mot de passe'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer le mot de passe' }))
+    listener('SIGNED_IN', { user: { id: 'user-2', email: 'autre@example.test' } } as Session)
+    expect(await screen.findByRole('alert')).toHaveTextContent('La session a changé')
+    resolve()
+    await waitFor(() => expect(screen.queryByText('Ton mot de passe a été modifié.')).not.toBeInTheDocument())
+  })
+
   it('permet d’annuler la récupération et de se déconnecter', async () => {
     mocks.initializeAuth.mockResolvedValue({ session, callback: 'recovery', failed: false })
     render(<Account />)
     fireEvent.click(await screen.findByRole('button', { name: 'Annuler et se déconnecter' }))
     expect(await screen.findByText('Tu es déconnecté.')).toBeInTheDocument()
     expect(mocks.auth.signOut).toHaveBeenCalledOnce()
+    expect(mocks.auth.signOut).toHaveBeenCalledWith({ scope: 'local' })
     expect(sessionStorage.getItem('coffee101-password-recovery')).toBeNull()
   })
 

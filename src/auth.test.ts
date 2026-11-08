@@ -78,7 +78,7 @@ describe('retour d’authentification', () => {
     mocks.getSession.mockResolvedValue({ data: { session: recovery }, error: null })
     mocks.createClient.mockReturnValueOnce({ auth: { setSession: mocks.setSession, getSession: mocks.getSession } }).mockReturnValueOnce(isolated)
     const auth = await import('./auth')
-    await auth.updateRecoveryPassword('one', 'nouveau')
+    await auth.updateRecoveryPassword('one', 'nouveau', () => true)
     expect(isolated.auth.setSession).toHaveBeenCalledWith({ access_token: 'a', refresh_token: 'r' })
     expect(isolated.auth.updateUser).toHaveBeenCalledWith({ password: 'nouveau' })
     expect(isolated.auth.stopAutoRefresh).toHaveBeenCalledOnce()
@@ -87,7 +87,7 @@ describe('retour d’authentification', () => {
   it('refuse de modifier le mot de passe si le compte a changé', async () => {
     mocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'other' } } }, error: null })
     const auth = await import('./auth')
-    await expect(auth.updateRecoveryPassword('one', 'nouveau')).rejects.toThrow()
+    await expect(auth.updateRecoveryPassword('one', 'nouveau', () => true)).rejects.toThrow()
     expect(mocks.createClient).toHaveBeenCalledTimes(1)
   })
 
@@ -97,8 +97,18 @@ describe('retour d’authentification', () => {
     mocks.getSession.mockResolvedValue({ data: { session: recovery }, error: null })
     mocks.createClient.mockReturnValueOnce({ auth: { setSession: mocks.setSession, getSession: mocks.getSession } }).mockReturnValueOnce(isolated)
     const auth = await import('./auth')
-    await expect(auth.updateRecoveryPassword('one', 'nouveau')).rejects.toThrow()
+    await expect(auth.updateRecoveryPassword('one', 'nouveau', () => true)).rejects.toThrow()
     expect(isolated.auth.updateUser).not.toHaveBeenCalled()
     expect(isolated.auth.stopAutoRefresh).toHaveBeenCalledOnce()
+  })
+
+  it('annule une modification en attente si la session a changé', async () => {
+    const recovery = { user: { id: 'one' }, access_token: 'a', refresh_token: 'r' }
+    const isolated = { auth: { setSession: vi.fn().mockResolvedValue({ data: { user: { id: 'one' } }, error: null }), updateUser: vi.fn(), stopAutoRefresh: vi.fn() } }
+    mocks.getSession.mockResolvedValue({ data: { session: recovery }, error: null })
+    mocks.createClient.mockReturnValueOnce({ auth: { setSession: mocks.setSession, getSession: mocks.getSession } }).mockReturnValueOnce(isolated)
+    const auth = await import('./auth')
+    await expect(auth.updateRecoveryPassword('one', 'nouveau', () => false)).rejects.toThrow()
+    expect(isolated.auth.updateUser).not.toHaveBeenCalled()
   })
 })

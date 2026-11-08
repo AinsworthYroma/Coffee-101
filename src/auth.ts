@@ -42,7 +42,7 @@ function createAuthClient(): SupabaseClient | null {
 
 export const supabase = createAuthClient()
 
-export async function updateRecoveryPassword(owner: string, password: string): Promise<void> {
+export async function updateRecoveryPassword(owner: string, password: string, isCurrent: () => boolean): Promise<void> {
   if (!supabase || !url || !key) throw new Error('Authentication unavailable')
   const { data: current, error: sessionError } = await supabase.auth.getSession()
   if (sessionError || !current.session || current.session.user.id !== owner) throw new Error('Recovery session changed')
@@ -53,7 +53,7 @@ export async function updateRecoveryPassword(owner: string, password: string): P
     const { data, error } = await recoveryClient.auth.setSession({
       access_token: current.session.access_token, refresh_token: current.session.refresh_token,
     })
-    if (error || data.user?.id !== owner) throw new Error('Recovery session changed')
+    if (error || data.user?.id !== owner || !isCurrent()) throw new Error('Recovery session changed')
     const result = await recoveryClient.auth.updateUser({ password })
     if (result.error) throw result.error
   } finally {
