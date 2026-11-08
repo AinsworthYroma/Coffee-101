@@ -1,0 +1,57 @@
+.option-wheel {
+  position: relative;
+  width: max(100%, 306px);
+  height: 100%;
+  overflow: visible;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  outline: none;
+}
+
+.option-wheel--dragging {
+  cursor: grabbing;
+}
+
+.option-wheel__pivot {
+  position: absolute;
+  left: var(--ow-pivot-x, 68px);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.option-wheel__pivot .brand-mark {
+  width: 136px;
+  height: 136px;
+}
+
+@media (max-width: 340px) {
+  .option-wheel {
+    margin-left: -6px;
+  }
+}
+
+.option-wheel__marker {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 8px);
+  width: 20px;
+  height: 2px;
+  background: var(--roast);
+  transform: translateY(-50%);
+}
+
+.option-wheel__item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 128px;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}

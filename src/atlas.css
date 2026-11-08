@@ -1,0 +1,38 @@
+.explorer-atlas{grid-template-columns:minmax(0,2fr) minmax(0,3fr);column-gap:5%;align-items:start}
+.explorer-atlas .explorer-details{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:0 0 18px;border-bottom:1px solid var(--line)}
+.explorer-atlas .explorer-details .kicker{width:100%;margin:0}
+.explorer-atlas .explorer-details h1{font-size:38px;line-height:1.08;margin:0}
+.explorer-atlas .explorer-details>p:not(.kicker){align-self:auto;max-width:520px;font-size:14px;line-height:1.5}
+.explorer-atlas .explorer-origins{width:100%;margin:4px 0 0;padding:0;border:0}
+.explorer-atlas .explorer-origins h2{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.explorer-atlas .origin-choices{gap:4px 26px}
+.explorer-atlas .origin-choices button{min-height:44px;padding:8px 0;border-bottom:3px solid transparent;color:#4d3526;font-size:14px}
+.explorer-atlas .origin-choices button[aria-pressed=true]{color:#24140d;border-color:#542415;font-weight:700}
+.explorer-atlas .origin-card,.explorer-atlas .origin-card:not([data-origin]){grid-column:1;grid-row:2;align-self:start;width:100%;max-width:none;margin:24px 0 0;padding:0;border:0;background:transparent}
+.explorer-atlas .origin-card .origin-card-kicker{margin:16px 0 8px;color:#542415;font-size:10px}
+.explorer-atlas .origin-card h2,.explorer-atlas .origin-card:not([data-origin]) h2{min-height:1.08em;margin:0;font-size:40px;line-height:1.08}
+.origin-destination{animation:origin-arrive .3s ease both}
+.origin-photo,.origin-previews{width:100%;aspect-ratio:3/2;margin:0;overflow:hidden;background:#38271c}
+.origin-photo{position:relative}
+.origin-photo img,.origin-previews img{display:block;width:100%;height:100%;object-fit:cover}
+.origin-photo figcaption{position:absolute;left:0;bottom:0;max-width:100%;padding:7px 10px;background:#24150e;color:#fff4e5;font-size:11px;line-height:1.35}
+.origin-previews{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px}
+.origin-previews button{position:relative;min-width:0;padding:0;border:0;overflow:hidden;background:#38271c;cursor:pointer}
+.origin-previews span{position:absolute;left:0;right:0;bottom:0;padding:8px 5px;background:#24150e;color:#fff4e5;font:700 11px/1.3 var(--font-body);text-align:center}
+.origin-previews button:focus-visible{outline:3px solid #fff4e5;outline-offset:-5px}
+.explorer-atlas .origin-intro{min-height:5em;margin:10px 0 18px;font-size:15px;line-height:1.65}
+.explorer-atlas .origin-card details{margin:0;padding:0;border-top:1px solid var(--line)}
+.explorer-atlas .origin-card details[open]{padding-inline:12px;background:#ead8ba}
+.explorer-atlas .origin-card details p{padding:0 0 16px;font-size:14px;line-height:1.65}
+.explorer-atlas .origin-card summary{min-height:48px}
+.explorer-atlas .origin-card summary:focus-visible{outline:3px solid var(--focus);outline-offset:-3px}
+.origin-photo-credits ul{margin:0;padding:0 0 16px;list-style:none}
+.origin-photo-credits li{margin:0 0 8px;font-size:12px;line-height:1.55}
+.origin-photo-credits a{text-decoration:underline;text-underline-offset:2px}
+.explorer-atlas .explorer-earth{grid-column:2;grid-row:2;align-self:start;width:100%;max-width:680px;margin-top:12px}
+.explorer-atlas .globe-stage{height:auto;min-height:0;aspect-ratio:1}
+@keyframes origin-arrive{from{opacity:.72;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.origin-card--reduced .origin-destination{animation:none}
+@media(prefers-reduced-motion:reduce){.origin-destination{animation:none}}
+@media(max-width:900px),(orientation:portrait) and (max-width:1100px){.explorer-atlas{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 4%}.explorer-atlas .explorer-details{grid-column:1/-1;grid-row:1}.explorer-atlas .origin-card,.explorer-atlas .origin-card:not([data-origin]){grid-column:1;grid-row:2}.explorer-atlas .explorer-earth{grid-column:2;grid-row:2}.explorer-atlas .origin-card h2,.explorer-atlas .origin-card:not([data-origin]) h2{font-size:32px}.origin-connector{display:none}}
+@media(max-width:700px){.explorer-atlas{grid-template-columns:minmax(0,1fr)}.explorer-atlas .explorer-details{grid-column:1}.explorer-atlas .explorer-details h1{font-size:34px}.explorer-atlas .explorer-earth{grid-column:1;grid-row:2;max-width:450px;margin-top:4px}.explorer-atlas .origin-card,.explorer-atlas .origin-card:not([data-origin]){grid-column:1;grid-row:3;margin-top:20px}.explorer-atlas .origin-intro{min-height:0}.explorer-atlas .origin-card h2,.explorer-atlas .origin-card:not([data-origin]) h2{min-height:0}}

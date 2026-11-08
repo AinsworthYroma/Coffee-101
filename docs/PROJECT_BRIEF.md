@@ -17,7 +17,7 @@ All user-facing content must be natural French, including navigation, instructio
 - Use comfortable touch targets, visible focus, clear labels, and readable type.
 - Keep forms usable with the iPad on-screen keyboard open.
 - Respect reduced-motion preferences; nonessential effects must not be necessary to understand or use the app.
-- Use a static background with no mouse-following effects or scroll-jacking.
+- Use one persistent autonomous Liquid Ether background animated across the three pages, visible through translucent warm kraft on Explorer and Déguster, with a separate stationary granular layer and more opaque reading and form surfaces. Do not use mouse/touch-driven fluid forces or global pointer tracking. Provide a footer display preference to reduce background animations, remembered when local storage is available, plus a static system reduced-motion state, textured WebGL fallback, suspension off-screen or when hidden, and cleanup. Do not use a floating background pause control or scroll-jacking.
 
 ## 3. Information architecture
 
@@ -27,17 +27,13 @@ Three connected pages: Préparer → Explorer → Déguster. These are working F
 
 The landing page welcomes the user, optionally includes a birthday dedication, and clearly explains the three-part journey. Primary action: Préparer mon café. Secondary links: Explorer les origines and Noter ma dégustation.
 
-Default experience: Un bon espresso avec ta machine. Prioritize the automatic bean-to-cup espresso workflow instead of forcing a method-selection screen at every visit. Allow another method to be selected and remembered.
+The main method selector retains the adapted React Bits Circular Carousel's orbital intent, replacing its image layer with one shared Three.js scene of isolated equipment. Present exactly four unique methods, with the automatic bean-to-cup machine first. Rotate only the central object slowly; do not autoplay method selection. A deliberate tap or click opens the corresponding detailed guide; provide previous/next controls, keyboard access and transparent static renders for WebGL fallback. Preserve selection, scroll and focus when returning from a guide. Stop rendering when hidden or off-screen and respect reduced motion.
 
 Content should cover choosing beans, storage/freshness, water, available machine adjustments where supported, a simple preparation sequence, and understanding the resulting cup. Separate generally applicable guidance from model-dependent instructions. Never apply a manual espresso recipe as though an automatic machine exposes the same controls.
 
-Include a secondary Découvrir d'autres méthodes area with approachable guides to:
-- Manual/semi-automatic espresso.
-- Electric filter coffee.
-- Manual filter/pour-over.
-- French press.
-- Moka pot.
-- AeroPress.
+Provide four approachable guides: automatic bean-to-cup espresso, AeroPress, espresso with a portafilter, and filter coffee with distinct electric-machine and manual V60 modes. Each guide adapts its starting recipe to roast and desired profile where supported, explains its assumptions and sources, and offers a tasting proposal without silently replacing an existing draft. Unknown equipment settings must not be presented as adjustable controls.
+
+Use the locally adapted React Bits Option Wheel for roast and two Specular Buttons as an exclusive profile radio group. Both reflect the existing recipe choices, work with keyboard and touch, and remain understandable without motion or WebGL. Preserve the remaining settings when either choice changes.
 
 Each guide should explain equipment, the principle of the method, relevant grind guidance, a sourced starting recipe where appropriate, steps, adjustable variables, and common problems. Offer optional detail rather than long compulsory reading. Use dose/water calculators only for methods where they make sense; do not impose one universal calculator. Recipes are starting points, not guarantees or universal rules.
 
@@ -45,15 +41,17 @@ Explain basics in plain French: whole beans versus ground coffee, freshness and 
 
 ### Page 2: Explorer
 
-The interactive Earth globe is the signature exploratory experience, not a decorative object. Support touch dragging, desktop dragging, zoom controls, origin selection, and a visible reset-view action. Prevent the globe from trapping ordinary page navigation.
+The interactive Earth globe is the signature exploratory experience, not a decorative object. Support touch and desktop dragging, with slow continuous rotation that resumes immediately on release. The footer's reduced-animation preference is the only user-facing pause, alongside system reduced motion; suspend rotation during dragging, off-screen and while hidden. Selecting a region must not recenter or pause the globe. Do not add a globe command bar. Prevent the globe from trapping ordinary page navigation. The current atlas contains three sourced regional introductions and indicative markers; do not invent further origins or geographic precision.
 
 Provide a searchable/selectable origin list and a usable non-3D fallback, both exposing the same educational content. A user must never need to manipulate the globe to find an origin.
 
-Use a globe/detail-panel composition on desktop and landscape iPad. Adapt it coherently for portrait iPad. Keep controls, geographic highlights, and text distinct and legible. Avoid distracting perpetual rotation.
+Use a regional Spotlight panel, globe and introduction/region controls in three columns on desktop and landscape iPad. Before selection, show a compact invitation; keep essential sourced details visible on selection. Adapt coherently for portrait iPad. A decorative connector follows the actual visible projected marker only when it can be drawn without crossing the globe or text. Keep controls, geographic highlights, and text distinct and legible. Keep automatic rotation slow and unobtrusive.
 
 Start with a manageable curated selection, potentially Ethiopia, Kenya, Colombia, Brazil, Guatemala, Costa Rica, Peru, Indonesia, India, and Vietnam. This is a proposed seed list, not exhaustive coverage. Verify content and geographic data before publication. Distinguish countries from producing regions; never invent regional coordinates or precision.
 
 Origin details should include country/region where known, a short introduction, relevant growing conditions, varieties/species and processing where supported, qualified possible sensory tendencies, and an action to start a tasting with that origin preselected. Explain the coffee-growing belt, arabica/robusta, washed/natural/honey processing, and the distinction between origin, process, and roast in optional beginner-friendly sections.
+
+Keep the atlas concise. Below it, an accessible visual accordion introduces washed, natural, honey/pulped natural, wet-hulled and fermentation conditions, distinguishing fermentation from processing types. Detailed explanations belong in a separate accessible guide reached from Explorer, not a fourth main navigation tab. Direct links open the relevant section; returning preserves the atlas, gallery panel, reading position and globe state. Preparation guides and recipes remain in Préparer.
 
 Never imply that every coffee from a country has the same taste. Explain that the specific region, variety, processing, roast, and preparation affect the cup. Use topographic contours as decoration unless actual elevation data supports the visualization.
 
@@ -96,16 +94,16 @@ Aim for a coherent, editorial, tactile experience with precise digital touches. 
 
 1. Bauhaus-inspired geometry: the main visual language. Use deliberate circles, semicircles, lines, and abstract cup/bean forms to support page composition, illustrations, and labeled flavor categories. Do not scatter unrelated shapes as filler.
 2. Topographic lines: supporting motif for origins, regional illustrations, and restrained globe-adjacent decoration. Do not cover the globe with distracting patterns or imply false terrain data.
-3. Restrained glassmorphism: floating navigation and selected globe controls. Brewing instructions, detailed origin text, and tasting forms should use solid or nearly opaque reading surfaces. Test text contrast against every underlying state.
-4. Liquid morph: one short signature moment, for example a bean becoming a drop when moving toward tasting. No permanently morphing backgrounds or liquid treatment on every control. Supply a reduced-motion alternative.
+3. Warm kraft-paper surfaces: muted tan and ochre, fine stationary fibres and gentle tonal variation, with lighter label surfaces selectively for reading. Pair these with espresso and crema, and keep text and controls crisp. Restrained glassmorphism can be used for navigation and selected globe controls. Test text contrast against every underlying state.
+4. Liquid Ether: a single persistent espresso/crema-inspired background replaces the earlier bean swarm and connects all three pages. Animate it autonomously throughout, beneath translucent kraft on Explorer and Déguster. Retain broad golden caramel crema over time without resets or bursts. A fine, dense, stationary granular layer sits beneath the fluid and also textures the reading surfaces, with a shared intensity token. Shared Gooey Nav provides the navigation transition. Reading and form surfaces remain solid or nearly opaque. Supply static reduced-motion and textured WebGL alternatives, and no pointer-driven fluid interaction. Review the initial state, prolonged states and returns from navigation and a hidden tab.
 
-A proposed, not yet finalized palette is warm ivory, espresso near-black, muted terracotta, and a restrained blue or green accent. Typography should be clear, understated, and carefully composed rather than overly decorative.
+The palette pairs warm kraft, espresso near-black, roasted brown, caramel, crema and light labels, without decorative green. Keep the globe's ocean and land distinct and legible. Preserve Bricolage Grotesque headings and readable body typography. The logo uses a simple tilted coffee-bean silhouette with one curved groove and light/dark variants.
 
 ### Optional, not committed
 
 Risograph OR paper-cutout illustration can be explored as one coherent supporting treatment. They are alternatives, not an instruction to stack both. Clay 3D would be an alternative illustration direction. A small holographic birthday detail or a brief introductory title reveal could be considered only if it strengthens the composition.
 
-Do not add ASCII art, pixel art, neon glow, particle swarms, glitches, vaporwave grids, ray-marched fractals, dithering, flow fields, or metaballs simply to demonstrate effects. The globe already supplies the main interactive visual feature. Do not turn the app into a shader showcase.
+Do not add ASCII art, pixel art, neon glow, particle swarms, glitches, vaporwave grids, ray-marched fractals, dithering, or unrelated effects simply to demonstrate effects. The globe remains the main interactive visual feature. Do not turn the app into a shader showcase.
 
 ## 7. Content and asset integrity
 
@@ -115,16 +113,9 @@ No invented regional facts, exact coordinates, sensory promises, or placeholder 
 
 ## 8. Scope and implementation sequence
 
-The owner has approved recording this brief in GitHub. This is a documentation handoff, not approval of a particular stack or an instruction to launch an autonomous coding job.
+The owner approved Vite, React and TypeScript, local IndexedDB through idb when persistence is implemented, Vitest/Testing Library, Playwright, a Three.js Earth globe, and static hosting. The current foundation has an interactive globe and three sourced regional introductions but is not the completed MVP. Keep future changes in reviewable stages and obtain approval for consequential scope or architecture changes.
 
-First coding-assistant response:
-1. Inspect the repository and read this document.
-2. Summarize the architecture and user journeys.
-3. Propose a lean stack with rationale and alternatives, including globe rendering, persistence, testing, and deployment considerations. Do not silently choose or install it.
-4. Propose an implementation plan and identify only consequential unknowns.
-5. Wait for the owner's approval before scaffolding or installing dependencies.
-
-After approval, implement in reviewable stages:
+Implementation stages:
 1. Design tokens, navigation, accessible layouts, and French content structure.
 2. Automatic-machine-first preparation page and secondary brewing guides.
 3. Tasting flow, draft persistence, notebook CRUD, and validated export/import.
@@ -139,7 +130,7 @@ The MVP includes all three pages, a real interactive globe with accessible fallb
 - Exact automatic-machine model.
 - Dad's name, birthday message, and gifted coffee details.
 - Final palette, typography, and whether any optional illustration texture is used.
-- Stack, globe/data sources, asset licenses, and deployment target.
+- Globe/data sources, asset licenses, and specific deployment target.
 
 Unknown personal details should not block planning; isolate them in configuration. Unknown machine capabilities must not become invented advice.
 
