@@ -12,6 +12,8 @@
 .account-panel input:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
 .account-submit{min-height:48px;padding:10px 16px;border:0;border-radius:4px;background:var(--roast);color:#fff3df;font:700 15px var(--font-body);cursor:pointer}
 .account-submit:disabled,.account-links button:disabled{opacity:.6;cursor:wait}
+.account-cancel{min-height:44px;margin-top:12px;padding:4px 0;border:0;background:none;color:var(--roast);font:700 14px var(--font-body);text-decoration:underline;cursor:pointer}
+.account-cancel:disabled{opacity:.6;cursor:wait}
 .account-links{display:flex;flex-wrap:wrap;gap:2px 18px;margin-top:12px}
 .account-links button{min-height:44px;padding:4px 0;border:0;background:none;color:var(--roast);font:700 14px var(--font-body);text-decoration:underline;cursor:pointer}
 .account-error{padding:10px;border-left:3px solid #8a3023;background:#fff3e7}

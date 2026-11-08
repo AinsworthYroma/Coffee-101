@@ -5,7 +5,7 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import Account from './Account'
 
 const mocks = vi.hoisted(() => ({
-  initializeAuth: vi.fn(),
+  initializeAuth: vi.fn(), updateRecoveryPassword: vi.fn(),
   auth: {
     onAuthStateChange: vi.fn(), signInWithPassword: vi.fn(), signUp: vi.fn(), resend: vi.fn(),
     resetPasswordForEmail: vi.fn(), updateUser: vi.fn(), signOut: vi.fn(),
@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./auth', () => ({
   supabase: { auth: mocks.auth },
   initializeAuth: mocks.initializeAuth,
+  updateRecoveryPassword: mocks.updateRecoveryPassword,
   redirectUrl: (kind: string) => `http://localhost:3000/?auth=${kind}`,
 }))
 
@@ -25,6 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   sessionStorage.clear()
   mocks.initializeAuth.mockResolvedValue({ session: null, callback: null, failed: false })
+  mocks.updateRecoveryPassword.mockResolvedValue(undefined)
   mocks.auth.onAuthStateChange.mockImplementation(callback => { listener = callback; return { data: { subscription: { unsubscribe } } } })
   for (const fn of [mocks.auth.signInWithPassword, mocks.auth.resend, mocks.auth.resetPasswordForEmail, mocks.auth.updateUser, mocks.auth.signOut]) fn.mockResolvedValue({ error: null })
   mocks.auth.signUp.mockResolvedValue({ data: { session: null }, error: null })
@@ -102,7 +104,7 @@ describe('compte', () => {
     fillPassword('Nouveau mot de passe')
     fireEvent.change(screen.getByLabelText('Confirmer le mot de passe'), { target: { value: 'password123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer le mot de passe' }))
-    await waitFor(() => expect(mocks.auth.updateUser).toHaveBeenCalledWith({ password: 'password123' }))
+    await waitFor(() => expect(mocks.updateRecoveryPassword).toHaveBeenCalledWith('user-1', 'password123'))
     expect(await screen.findByText('Ton mot de passe a été modifié.')).toBeInTheDocument()
   })
 
@@ -141,6 +143,25 @@ describe('compte', () => {
     mocks.initializeAuth.mockResolvedValue({ session, callback: null, failed: false })
     render(<Account />)
     expect(await screen.findByRole('heading', { name: 'Choisir un nouveau mot de passe' })).toBeVisible()
+  })
+
+  it('ferme la récupération quand un autre compte se connecte', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: 'recovery', failed: false })
+    render(<Account />)
+    await screen.findByRole('heading', { name: 'Choisir un nouveau mot de passe' })
+    listener('SIGNED_IN', { user: { id: 'user-2', email: 'autre@example.test' } } as Session)
+    expect(await screen.findByRole('alert')).toHaveTextContent('La session a changé')
+    expect(screen.queryByRole('heading', { name: 'Choisir un nouveau mot de passe' })).not.toBeInTheDocument()
+    expect(mocks.updateRecoveryPassword).not.toHaveBeenCalled()
+  })
+
+  it('permet d’annuler la récupération et de se déconnecter', async () => {
+    mocks.initializeAuth.mockResolvedValue({ session, callback: 'recovery', failed: false })
+    render(<Account />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Annuler et se déconnecter' }))
+    expect(await screen.findByText('Tu es déconnecté.')).toBeInTheDocument()
+    expect(mocks.auth.signOut).toHaveBeenCalledOnce()
+    expect(sessionStorage.getItem('coffee101-password-recovery')).toBeNull()
   })
 
   it('confirme le retour et ne confond pas les comptes lors de la reprise', async () => {

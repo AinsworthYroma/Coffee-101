@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { initializeAuth, redirectUrl, supabase } from './auth'
+import { initializeAuth, redirectUrl, supabase, updateRecoveryPassword } from './auth'
 import './account.css'
 
 type Mode = 'signin' | 'signup' | 'resend' | 'reset' | 'recovery'
@@ -27,14 +27,19 @@ export default function Account() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const submitting = useRef(false)
+  const recoveryUser = useRef<string | null>(null)
 
   useEffect(() => {
     let active = true
     const subscription = supabase?.auth.onAuthStateChange((event, next) => {
       if (!active) return
       setSession(next)
-      if (event === 'PASSWORD_RECOVERY' && next) { rememberRecovery(next.user.id); setMode('recovery'); setOpen(true) }
-      if (event === 'SIGNED_OUT') { rememberRecovery(null); setMode('signin') }
+      if (event === 'PASSWORD_RECOVERY' && next) { recoveryUser.current = next.user.id; rememberRecovery(next.user.id); setMode('recovery'); setOpen(true) }
+      else if (recoveryUser.current && next?.user.id !== recoveryUser.current) {
+        recoveryUser.current = null; rememberRecovery(null); setMode('signin')
+        setError('La session a changé. Demande un nouveau lien de réinitialisation.')
+      }
+      if (event === 'SIGNED_OUT') { recoveryUser.current = null; rememberRecovery(null); setMode('signin') }
     }).data.subscription
     void initializeAuth().then(result => {
       if (!active) return
@@ -42,11 +47,11 @@ export default function Account() {
       setLoading(false)
       if (result.callback) {
         setOpen(true)
-        if (result.callback === 'recovery' && result.session) { rememberRecovery(result.session.user.id); setMode('recovery') }
+        if (result.callback === 'recovery' && result.session) { recoveryUser.current = result.session.user.id; rememberRecovery(result.session.user.id); setMode('recovery') }
         else if (result.callback === 'confirm') setMessage('Ton adresse a été confirmée.')
         else setError('Ce lien est invalide ou a expiré. Demande un nouveau lien.')
       } else if (result.failed) setError('Impossible de retrouver la session. Vérifie ta connexion et réessaie.')
-      else if (result.session && recoveryOwner() === result.session.user.id) { setMode('recovery'); setOpen(true) }
+      else if (result.session && recoveryOwner() === result.session.user.id) { recoveryUser.current = result.session.user.id; setMode('recovery'); setOpen(true) }
     })
     return () => { active = false; subscription?.unsubscribe() }
   }, [])
@@ -77,9 +82,9 @@ export default function Account() {
         if (error && !['user_not_found', 'email_not_found'].includes(error.code ?? '')) throw error
         setMessage(emailMessage)
       } else {
-        const { error } = await supabase.auth.updateUser({ password })
-        if (error) throw error
-        rememberRecovery(null); setPassword(''); setConfirmation(''); setMode('signin'); setMessage('Ton mot de passe a été modifié.')
+        if (!recoveryUser.current) throw new Error('Recovery session missing')
+        await updateRecoveryPassword(recoveryUser.current, password)
+        recoveryUser.current = null; rememberRecovery(null); setPassword(''); setConfirmation(''); setMode('signin'); setMessage('Ton mot de passe a été modifié.')
       }
     } catch {
       setError(mode === 'signin' ? 'Connexion impossible. Vérifie tes identifiants et ta connexion, puis réessaie.' : 'La demande n’a pas abouti. Vérifie ta connexion et réessaie plus tard.')
@@ -91,7 +96,7 @@ export default function Account() {
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
-      setSession(null); changeMode('signin'); setMessage('Tu es déconnecté.')
+      recoveryUser.current = null; rememberRecovery(null); setSession(null); changeMode('signin'); setMessage('Tu es déconnecté.')
     } catch { setError('Déconnexion impossible. Vérifie ta connexion et réessaie.') }
     finally { submitting.current = false; setBusy(false) }
   }
@@ -113,6 +118,7 @@ export default function Account() {
           {(mode === 'signup' || mode === 'recovery') && <label>Confirmer le mot de passe<input type="password" autoComplete="new-password" required minLength={6} value={confirmation} onChange={event => setConfirmation(event.target.value)} /></label>}
           <button className="account-submit" type="submit" disabled={busy}>{busy ? 'En cours…' : mode === 'recovery' ? 'Enregistrer le mot de passe' : mode === 'reset' ? 'Envoyer le lien' : mode === 'resend' ? 'Renvoyer le lien' : titles[mode]}</button>
         </form>
+        {mode === 'recovery' && <button className="account-cancel" type="button" disabled={busy} onClick={() => void signOut()}>Annuler et se déconnecter</button>}
         {mode !== 'recovery' && <div className="account-links">
           {mode !== 'signin' && <button type="button" disabled={busy} onClick={() => changeMode('signin')}>Se connecter</button>}
           {mode !== 'signup' && <button type="button" disabled={busy} onClick={() => changeMode('signup')}>Créer un compte</button>}
