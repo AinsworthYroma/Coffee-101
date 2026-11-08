@@ -21,6 +21,6 @@
 @media(max-width:760px){.account-entry{margin-left:auto}.account-panel{max-height:calc(100dvh - 150px)}}
 
 /* Hide only the header logo and the two introductory account paragraphs. */
-.site-header > .brand{display:none}
+.site-header > .brand{visibility:hidden}
 .account-panel > .account-heading + p[aria-live="polite"],
 .account-panel > .account-heading + p[aria-live="polite"] + p{display:none}
