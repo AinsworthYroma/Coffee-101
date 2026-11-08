@@ -28,6 +28,11 @@ it('valide le retour de récupération avec le vrai SDK et un serveur simulé', 
       expect.objectContaining({ method: 'GET' }),
     )
     expect(window.location.href).not.toContain('access_token')
+    await auth.updateRecoveryPassword('user-1', 'un-nouveau-mot-de-passe')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://uatfivtdbizqljzljmgw.supabase.co/auth/v1/user',
+      expect.objectContaining({ method: 'PUT', body: expect.stringContaining('"password":"un-nouveau-mot-de-passe"') }),
+    )
   } finally {
     auth.supabase?.auth.stopAutoRefresh()
   }
