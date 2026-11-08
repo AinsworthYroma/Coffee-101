@@ -12,6 +12,7 @@ import ProcessingGallery from './ProcessingGallery'
 import Tasting from './Tasting'
 import CurvedLoop from './vendor/react-bits/CurvedLoop'
 import SpecularButton from './vendor/react-bits/SpecularButton'
+import Account from './Account'
 import './atlas.css'
 
 const CremaBackground = lazy(() => import('./CremaBackground'))
@@ -38,6 +39,7 @@ function Header({ view, navigate }: { view: View; navigate: (index: number) => v
         <span>coffee <strong>101</strong><small>UN CAFÉ À LA FOIS</small></span>
       </a>}
       <GooeyNav ariaLabel="Navigation principale" items={navigation.map(item => ({ label: item.label, href: `?vue=${item.id}` }))} activeIndex={navigation.findIndex(item => item.id === view)} onNavigate={navigate} color="#f0d9b3" activeTextColor="#24150e" colors={['#d4a565', '#f0d9b3']} animationTime={450} particleCount={6} timeVariance={60} spread={24} gooeyness={0.45} wobble={0.15} hoverEffect={false} />
+      <Account />
     </header>
   )
 }

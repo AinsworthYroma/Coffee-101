@@ -1,0 +1,19 @@
+.account-entry{grid-column:3;justify-self:end;min-height:44px;padding:8px 14px;border:1px solid #f0d9b3;border-radius:4px;background:var(--glass);color:#fff3df;font:700 14px var(--font-body);cursor:pointer}
+.account-panel{position:absolute;z-index:10;top:100%;right:clamp(20px,4vw,56px);width:min(440px,calc(100vw - 40px));max-height:calc(100dvh - 110px);overflow:auto;padding:24px;background:var(--label);color:var(--ink);box-shadow:var(--glass-shadow);border:1px solid var(--line);font-size:15px;line-height:1.5}
+.account-panel[hidden]{display:none}
+.account-heading{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.account-heading h2{font:700 24px/1.2 var(--font-heading)}
+.account-heading button{min-width:44px;min-height:44px;margin:-10px -10px 0 0;border:0;background:transparent;color:var(--ink);font-size:26px;cursor:pointer}
+.account-panel p{margin:12px 0}
+.account-panel form,.account-panel label{display:grid;gap:8px}
+.account-panel form{gap:16px;margin-top:18px}
+.account-panel label{font-weight:700}
+.account-panel input{width:100%;min-height:48px;padding:10px;border:1px solid #704c35;border-radius:4px;background:#fffaf0;color:var(--ink);font:400 16px var(--font-body)}
+.account-panel input:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.account-submit{min-height:48px;padding:10px 16px;border:0;border-radius:4px;background:var(--roast);color:#fff3df;font:700 15px var(--font-body);cursor:pointer}
+.account-submit:disabled,.account-links button:disabled{opacity:.6;cursor:wait}
+.account-links{display:flex;flex-wrap:wrap;gap:2px 18px;margin-top:12px}
+.account-links button{min-height:44px;padding:4px 0;border:0;background:none;color:var(--roast);font:700 14px var(--font-body);text-decoration:underline;cursor:pointer}
+.account-error{padding:10px;border-left:3px solid #8a3023;background:#fff3e7}
+.account-message{padding:10px;border-left:3px solid var(--roast);background:#fffaf0}
+@media(max-width:760px){.account-entry{margin-left:auto}.account-panel{max-height:calc(100dvh - 150px)}}
