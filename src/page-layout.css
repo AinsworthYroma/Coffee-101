@@ -1,0 +1,4 @@
+/* Footer follows long content and reaches the viewport bottom on short pages. */
+.app-shell{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
+.app-shell>.site-header,.app-shell>.site-footer{flex-shrink:0}
+.app-shell>.site-footer{margin-top:auto}

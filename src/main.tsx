@@ -7,6 +7,7 @@ import TastingEntryFlow from './TastingEntryFlow'
 import './styles.css'
 import './tasting-detail-background.css'
 import './library-amber-glass.css'
+import './page-layout.css'
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
