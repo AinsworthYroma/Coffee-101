@@ -1,0 +1,8 @@
+/* New tasting entries start in Prepare; existing records and drafts stay accessible. */
+.tasting .tasting-heading>.tasting-primary,
+.tasting .tasting-empty-actions>.tasting-primary,
+.tasting .tasting-drafts>button,
+.tasting button[data-requires-preparation]{display:none}
+.tasting .tasting-empty>div:last-child>p:not(.tasting-start-guidance){display:none}
+.tasting .tasting-empty .tasting-start-guidance{max-width:55ch;margin:14px 0 20px;color:inherit;font-size:15px;line-height:1.7}
+.tasting .tasting-empty-actions>.tasting-link{min-height:44px;text-underline-offset:4px}

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import LibraryToolbar from './LibraryToolbar'
 import TastingDetailAppearance from './TastingDetailAppearance'
+import TastingEntryFlow from './TastingEntryFlow'
 import './styles.css'
 import './tasting-detail-background.css'
 
@@ -11,5 +12,6 @@ createRoot(document.getElementById('root')!).render(
     <App />
     <LibraryToolbar />
     <TastingDetailAppearance />
+    <TastingEntryFlow />
   </React.StrictMode>,
 )
