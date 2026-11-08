@@ -83,8 +83,13 @@ describe('compte', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Si cette adresse')
   })
 
-  it('donne le même message si une inscription existe déjà', async () => {
-    mocks.auth.signUp.mockResolvedValue({ data: { session: null }, error: { code: 'user_already_exists' } })
+  it.each([
+    ['user_already_exists', null],
+    ['user_already_exists', { user: null, session: null }],
+    ['email_exists', null],
+    ['email_exists', { user: null, session: null }],
+  ])('donne le même message pour %s avec données %s', async (code, data) => {
+    mocks.auth.signUp.mockResolvedValue({ data, error: { code } })
     await openAccount()
     fireEvent.click(screen.getByRole('button', { name: 'Créer un compte' }))
     fillEmail(); fillPassword()

@@ -74,7 +74,7 @@ export default function Account() {
       } else if (mode === 'signup') {
         const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectUrl('confirm') } })
         if (error && !['user_already_exists', 'email_exists'].includes(error.code ?? '')) throw error
-        setPassword(''); setConfirmation(''); setMessage(data.session ? 'Compte créé et connecté.' : emailMessage)
+        setPassword(''); setConfirmation(''); setMessage(!error && data?.session ? 'Compte créé et connecté.' : emailMessage)
       } else if (mode === 'resend') {
         const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: redirectUrl('confirm') } })
         if (error && !['user_not_found', 'email_not_found'].includes(error.code ?? '')) throw error
