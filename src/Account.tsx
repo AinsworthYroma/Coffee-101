@@ -5,6 +5,7 @@ import { notebookActivity, observeNotebookActivity } from './notebookActivity'
 import { notebookQueueLength } from './notebookSync'
 import { observeAuth } from './sharedAuth'
 import './account.css'
+import './account-sync-status.css'
 
 type Mode = 'signin' | 'signup' | 'resend' | 'reset' | 'recovery'
 const titles: Record<Mode, string> = {
@@ -136,17 +137,20 @@ export default function Account() {
   }
 
   const activity = notebookActivity(session?.user.id ?? '')
-  const notice = !session ? 'Ton carnet local n’est pas synchronisé avec un compte.' :
+  const notice = loading ? 'Chargement du compte…' :
+    !session ? 'Ton carnet local n’est pas synchronisé avec un compte.' :
     activity.pending || activity.failed ? 'Certaines modifications ne sont pas encore enregistrées ou synchronisées.' :
-    activity.queue === 'pending' ? 'Des modifications ne sont pas encore synchronisées avec ce compte.' :
-    activity.sync === 'ready' && activity.queue === 'empty' ? 'Dernière synchronisation confirmée ; aucune modification locale en attente.' :
+    activity.sync === 'checking' ? 'Synchronisation en cours…' :
     activity.sync === 'problem' ? 'La synchronisation n’est pas confirmée. Vérifie la connexion et consulte ton carnet.' :
+    activity.queue === 'pending' ? 'Des modifications ne sont pas encore synchronisées avec ce compte.' :
+    activity.sync === 'ready' && activity.queue === 'empty' && activity.acknowledged ? 'Dernière synchronisation confirmée ; aucune modification locale en attente.' :
+    activity.queue === 'empty' ? 'Lecture du compte terminée ; aucune modification locale en attente.' :
     'Ton carnet n’est pas encore confirmé comme synchronisé avec ce compte.'
   return <>
     <button className="account-entry" type="button" aria-expanded={open} aria-controls="account-panel" onClick={() => setOpen(value => !value)}>Mon compte</button>
     <section className="account-panel" id="account-panel" aria-labelledby="account-title" hidden={!open}>
       <div className="account-heading"><h2 id="account-title">{session && mode !== 'recovery' ? 'Mon compte' : titles[mode]}</h2><button type="button" onClick={() => setOpen(false)} aria-label="Fermer le compte">×</button></div>
-      <p aria-live="polite">{notice}</p><p>Le carnet de ton compte est distinct du carnet local. Les fiches locales ne sont copiées vers ton compte qu’avec ton accord. Pense à exporter tes données régulièrement.</p>
+      <p className="account-sync-status" role="status" aria-live="polite" aria-atomic="true"><span className="account-sync-status__label">Synchronisation du carnet</span><span>{notice}</span></p><p>Le carnet de ton compte est distinct du carnet local. Les fiches locales ne sont copiées vers ton compte qu’avec ton accord. Pense à exporter tes données régulièrement.</p>
       {message && <p className="account-message" role="status">{message}</p>}
       {error && <p className="account-error" role="alert">{error}</p>}
       {!supabase ? <p>Le compte n’est pas configuré. Tu peux continuer à utiliser le carnet local.</p> : loading ? <p role="status">Chargement du compte…</p> : session && mode !== 'recovery' ? <>

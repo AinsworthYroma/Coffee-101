@@ -1,0 +1,7 @@
+/* The sync notice belongs in Account; alerts and conflict controls stay visible. */
+.app-shell--deguster .tasting>p.kicker,
+.app-shell--deguster .tasting>p[aria-live="polite"],
+.app-shell--deguster .tasting:has(.library-controls,.tasting-empty) .tasting-heading>div>p{display:none}
+.app-shell--deguster .tasting:has(.library-controls,.tasting-empty) .tasting-heading{margin-top:0}
+#account-panel>p.account-sync-status[aria-live="polite"]{display:grid;gap:6px;margin:16px 0;padding:13px 15px;border:1px solid #a9774740;border-radius:12px;background:linear-gradient(135deg,#d4a56526,#f7e7ca59);color:#382316;font-size:13px;line-height:1.6}
+.account-sync-status__label{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#755031}
