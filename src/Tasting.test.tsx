@@ -39,6 +39,30 @@ describe('parcours de dégustation', () => {
     expect(await screen.findByText('Ta fiche est enregistrée.')).toBeInTheDocument()
     expect((await loadStore()).records[0].name).toBe('Brouillon à conserver')
   })
+  it('garde le travail visible si un autre onglet a modifié le carnet invité', async () => {
+    const draft = tastingStore.newTasting()
+    await tastingStore.saveStore({ version: 1, drafts: [draft], records: [] })
+    render(<Tasting active proposal={null} clearProposal={vi.fn()} libraryRequest={0} onReturn={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Reprendre :/ }))
+    await tastingStore.saveStore({ version: 1, drafts: [{ ...draft, notes: 'Autre onglet' }], records: [] })
+    fireEvent.change(screen.getByLabelText('Nom du café'), { target: { value: 'Travail à exporter' } })
+    expect(await screen.findByRole('alert')).toHaveTextContent('autre onglet')
+    expect(screen.getByLabelText('Nom du café')).toHaveValue('Travail à exporter')
+    expect((await loadStore()).drafts[0].notes).toBe('Autre onglet')
+  })
+
+  it('ne remplace pas une fiche depuis un ancien brouillon sans base vérifiable', async () => {
+    const original = { ...tastingStore.newTasting(), name: 'Fiche actuelle' }
+    const draft = { ...tastingStore.newTasting(), name: 'Ancien brouillon', editOf: original.id }
+    await tastingStore.saveStore({ version: 1, drafts: [draft], records: [original] })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<Tasting active proposal={null} clearProposal={vi.fn()} libraryRequest={0} onReturn={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Reprendre : Ancien brouillon/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer ma fiche' }))
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('comme nouvelle fiche'))
+    expect((await loadStore()).records[0].name).toBe('Fiche actuelle')
+    expect((await loadStore()).drafts[0].name).toBe('Ancien brouillon')
+  })
 
   it('conserve la recette, les impressions et la fiche après rechargement', async () => {
     const choices = { ...initialChoices, method: 'aeropress' as const }

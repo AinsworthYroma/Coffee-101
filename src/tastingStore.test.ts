@@ -17,6 +17,23 @@ describe('carnet local', () => {
     expect(localStorage.getItem('coffee101-tasting-draft')).toBe('Mon ancien brouillon')
     expect((await loadStore()).drafts[0].id).toBe(data.drafts[0].id)
   })
+  it('migre le même brouillon dans deux onglets concurrents', async () => {
+    localStorage.setItem('coffee101-tasting-draft', 'Brouillon historique')
+    const [first, second] = await Promise.all([loadStore(), loadStore()])
+    expect(first.drafts[0].id).toBe(second.drafts[0].id)
+    expect((await loadStore()).drafts[0].id).toBe(first.drafts[0].id)
+  })
+  it('refuse une écriture invitée obsolète au lieu de remplacer un autre onglet', async () => {
+    const first = await loadStore()
+    const second = await loadStore()
+    const one = { ...first, drafts: [newTasting()] }
+    const two = { ...second, drafts: [newTasting()] }
+    const results = await Promise.allSettled([saveStore(one, first), saveStore(two, second)])
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
+    const stored = await loadStore()
+    expect([one.drafts[0].id, two.drafts[0].id]).toContain(stored.drafts[0].id)
+  })
 
   it('migre le carnet provisoire sans le supprimer et conserve les instantanés', async () => {
     const choices = { ...initialChoices, method: 'aeropress' as const }
